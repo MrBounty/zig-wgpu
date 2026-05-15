@@ -1,8 +1,9 @@
 const std = @import("std");
-const gpu = @import("gpu.zig");
+const GpuAllocator = @import("GpuAllocator.zig");
+const Mat = @import("Mat.zig");
 
 pub fn main() !void {
-    var gloc = try gpu.GpuAllocator.init();
+    var gloc = try GpuAllocator.init();
     defer gloc.deinit();
 
     // Input data: a[i] = i, b[i] = 15 - i  →  add should give all 15s
@@ -13,9 +14,9 @@ pub fn main() !void {
         data_b[i] = @floatFromInt(15 - i);
     }
 
-    const a = try gpu.Mat.load(&gloc, &data_a, 4, 4);
+    const a = try Mat.load(&gloc, &data_a, 4, 4);
     defer a.deinit();
-    const b = try gpu.Mat.load(&gloc, &data_b, 4, 4);
+    const b = try Mat.load(&gloc, &data_b, 4, 4);
     defer b.deinit();
 
     // a + b
