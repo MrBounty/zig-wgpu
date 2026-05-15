@@ -2,8 +2,8 @@ const std = @import("std");
 const GpuAllocator = @import("GpuAllocator.zig");
 const Mat = @import("Mat.zig");
 
-pub fn main() !void {
-    var gloc = try GpuAllocator.init();
+pub fn main(init: std.process.Init) !void {
+    var gloc = try GpuAllocator.init(init.gpa);
     defer gloc.deinit();
 
     // Input data: a[i] = i, b[i] = 15 - i  →  add should give all 15s

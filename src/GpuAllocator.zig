@@ -4,16 +4,19 @@ const c = @import("c.zig").c;
 
 const GpuAllocator = @This();
 
+cpu_allocator: std.mem.Allocator,
 instance: c.WGPUInstance,
 adapter: c.WGPUAdapter,
 device: c.WGPUDevice,
 queue: c.WGPUQueue,
 
+tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
+
 // Lazily created, cached for lifetime of allocator
 _pip_add: c.WGPUComputePipeline = null,
 _pip_scale: c.WGPUComputePipeline = null,
 
-pub fn init() !GpuAllocator {
+pub fn init(cpu_allocator: std.mem.Allocator) !GpuAllocator {
     const instance = c.wgpuCreateInstance(
         &std.mem.zeroes(c.WGPUInstanceDescriptor),
     ) orelse return error.NoInstance;
@@ -38,20 +41,52 @@ pub fn init() !GpuAllocator {
     const device = ctx.device orelse return error.NoDevice;
 
     return .{
+        .cpu_allocator = cpu_allocator,
         .instance = instance,
         .adapter = adapter,
         .device = device,
         .queue = c.wgpuDeviceGetQueue(device),
+        .tracked_buffers = .init(cpu_allocator),
     };
 }
 
 pub fn deinit(self: *GpuAllocator) void {
     if (self._pip_add) |p| c.wgpuComputePipelineRelease(p);
     if (self._pip_scale) |p| c.wgpuComputePipelineRelease(p);
+
+    var it = self.tracked_buffers.keyIterator();
+    while (it.next()) |buf_ptr| {
+        const buf = buf_ptr.*;
+        c.wgpuBufferDestroy(buf);
+        c.wgpuBufferRelease(buf);
+    }
+    self.tracked_buffers.deinit();
+
     c.wgpuQueueRelease(self.queue);
     c.wgpuDeviceRelease(self.device);
     c.wgpuAdapterRelease(self.adapter);
     c.wgpuInstanceRelease(self.instance);
+}
+
+pub fn registerBuffer(
+    self: *GpuAllocator,
+    bytes: u64,
+    usage: c.WGPUBufferUsage,
+) !c.WGPUBuffer {
+    const buf = c.wgpuDeviceCreateBuffer(self.device, &.{
+        .usage = usage,
+        .size = bytes,
+    }) orelse return error.BufferAlloc;
+
+    try self.tracked_buffers.put(buf, {});
+    return buf;
+}
+
+pub fn unregisterAndDestroyBuffer(self: *GpuAllocator, buf: c.WGPUBuffer) void {
+    if (self.tracked_buffers.remove(buf)) {
+        c.wgpuBufferDestroy(buf);
+        c.wgpuBufferRelease(buf);
+    }
 }
 
 // ── Internal ─────────────────────────────────────────────────────────────
