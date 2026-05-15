@@ -152,7 +152,6 @@ fn onDevice(
     }
     const ctx: *Ctx = @ptrCast(@alignCast(userdata1.?));
     ctx.device = device;
-    std.debug.print("{?}", .{device});
 }
 
 fn buildPipeline(device: c.WGPUDevice, wgsl: []const u8) !c.WGPUComputePipeline {

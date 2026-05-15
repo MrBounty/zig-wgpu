@@ -6,14 +6,14 @@ const GpuBuffer = @import("GpuBuffer.zig");
 const Mat = @This();
 
 buf: GpuBuffer,
-rows: u32,
-cols: u32,
+rows: usize,
+cols: usize,
 
 pub fn load(
     gloc: *GpuAllocator,
     data: []const f32,
-    rows: u32,
-    cols: u32,
+    rows: usize,
+    cols: usize,
 ) !Mat {
     std.debug.assert(data.len == @as(usize, rows) * cols);
     const bytes = data.len * @sizeOf(f32);
@@ -29,7 +29,7 @@ pub fn load(
     return .{ .buf = buf, .rows = rows, .cols = cols };
 }
 
-pub fn zeros(gloc: *GpuAllocator, rows: u32, cols: u32) !Mat {
+pub fn zeros(gloc: *GpuAllocator, rows: usize, cols: usize) !Mat {
     const bytes: u64 = @as(u64, rows) * cols * @sizeOf(f32);
     const buf = try GpuBuffer.init(
         gloc,
@@ -43,7 +43,7 @@ pub fn deinit(self: Mat) void {
     self.buf.deinit(); // Automatically cleans tracking map & releases GPU memory
 }
 
-pub fn len(self: Mat) u32 {
+pub fn len(self: Mat) usize {
     return self.rows * self.cols;
 }
 
@@ -144,7 +144,7 @@ fn dispatch2in1out(
     buf_b: GpuBuffer,
     buf_out: GpuBuffer,
     bytes: u64,
-    n: u32,
+    n: usize,
 ) !void {
     const bgl = c.wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
     defer c.wgpuBindGroupLayoutRelease(bgl);
@@ -162,7 +162,7 @@ fn submitPass(
     gloc: *GpuAllocator,
     pipeline: c.WGPUComputePipeline,
     entries: []const c.WGPUBindGroupEntry,
-    n: u32,
+    n: usize,
 ) !void {
     const bgl = c.wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
     defer c.wgpuBindGroupLayoutRelease(bgl);
@@ -179,7 +179,7 @@ fn submitPass(
     const pass = c.wgpuCommandEncoderBeginComputePass(enc, null);
     c.wgpuComputePassEncoderSetPipeline(pass, pipeline);
     c.wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, null);
-    c.wgpuComputePassEncoderDispatchWorkgroups(pass, ceilDiv(n, 64), 1, 1);
+    c.wgpuComputePassEncoderDispatchWorkgroups(pass, @intCast(ceilDiv(n, 256)), 1, 1);
     c.wgpuComputePassEncoderEnd(pass);
     c.wgpuComputePassEncoderRelease(pass);
 
@@ -189,6 +189,6 @@ fn submitPass(
     c.wgpuQueueSubmit(gloc.queue, 1, &cmd);
 }
 
-fn ceilDiv(n: u32, d: u32) u32 {
+fn ceilDiv(n: usize, d: usize) usize {
     return (n + d - 1) / d;
 }

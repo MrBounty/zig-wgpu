@@ -65,7 +65,6 @@ fn onDevice(
     }
     const ctx: *Ctx = @ptrCast(@alignCast(userdata1.?));
     ctx.device = device;
-    std.debug.print("{?}", .{device});
 }
 
 fn onMapped(

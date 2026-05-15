@@ -6,39 +6,61 @@ pub fn main(init: std.process.Init) !void {
     var gloc = try GpuAllocator.init(init.gpa);
     defer gloc.deinit();
 
-    // Input data: a[i] = i, b[i] = 15 - i  →  add should give all 15s
-    var data_a: [16]f32 = undefined;
-    var data_b: [16]f32 = undefined;
-    for (0..16) |i| {
-        data_a[i] = @floatFromInt(i);
-        data_b[i] = @floatFromInt(15 - i);
+    // Define the sizes you want to benchmark
+    const sizes = [_]usize{ 1, 1024, 4096, 16384, 65536, 262144, 1024 * 1024, 4 * 1024 * 1024 };
+
+    // Print table header
+    std.debug.print("\n| Element Count | Size (MB) | Time (ms) | Time (ns) |\n", .{});
+    std.debug.print("|--------------:|----------:|----------:|----------:|\n", .{});
+
+    const allocator = init.gpa;
+
+    for (sizes) |size| {
+        // Dynamically allocate buffers for the current size
+        var data_a = try allocator.alloc(f32, size);
+        defer allocator.free(data_a);
+        var data_b = try allocator.alloc(f32, size);
+        defer allocator.free(data_b);
+
+        // Populate data
+        for (0..size) |i| {
+            data_a[i] = @floatFromInt(i);
+            data_b[i] = @floatFromInt(size - 1 - i);
+        }
+
+        // Start timing the GPU operations
+        const start = std.Io.Clock.awake.now(init.io);
+
+        const a = try Mat.load(&gloc, data_a, size, 1);
+        defer a.deinit();
+        const b = try Mat.load(&gloc, data_b, size, 1);
+        defer b.deinit();
+
+        // a + b
+        const sum = try a.add(&gloc, b);
+        defer sum.deinit();
+
+        // sum * 2
+        const scaled = try sum.scale(&gloc, 2.0);
+        defer scaled.deinit();
+
+        // Read back (allocating dynamically for read-back buffers too)
+        const out_sum = try allocator.alloc(f32, size);
+        defer allocator.free(out_sum);
+        const out_scaled = try allocator.alloc(f32, size);
+        defer allocator.free(out_scaled);
+
+        try sum.read(&gloc, out_sum);
+        try scaled.read(&gloc, out_scaled);
+
+        const duration = start.durationTo(std.Io.Clock.awake.now(init.io));
+        const ns = duration.toNanoseconds();
+        const ms = @as(f64, @floatFromInt(ns)) / 1_000_000.0;
+        const mb = @as(f64, @floatFromInt(size * @sizeOf(f32))) / (1024.0 * 1024.0);
+
+        // Print table row
+        std.debug.print("| {d:12} | {d:8.2} | {d:9.3} | {d:9} |\n", .{ size, mb, ms, ns });
     }
-
-    const a = try Mat.load(&gloc, &data_a, 4, 4);
-    defer a.deinit();
-    const b = try Mat.load(&gloc, &data_b, 4, 4);
-    defer b.deinit();
-
-    // a + b
-    const sum = try a.add(&gloc, b);
-    defer sum.deinit();
-
-    // sum * 2
-    const scaled = try sum.scale(&gloc, 2.0);
-    defer scaled.deinit();
-
-    // Read back
-    var out_sum: [16]f32 = undefined;
-    var out_scaled: [16]f32 = undefined;
-    try sum.read(&gloc, &out_sum);
-    try scaled.read(&gloc, &out_scaled);
-
-    // Print
-    std.debug.print("\na + b  (expect all 15):\n", .{});
-    printMat(&out_sum, 4, 4);
-
-    std.debug.print("\n(a + b) * 2  (expect all 30):\n", .{});
-    printMat(&out_scaled, 4, 4);
 }
 
 fn printMat(data: []const f32, rows: u32, cols: u32) void {
