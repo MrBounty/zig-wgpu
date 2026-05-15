@@ -2,6 +2,13 @@ const std = @import("std");
 const sh = @import("shaders.zig");
 const c = @import("c.zig").c;
 
+pub const GpuConfig = struct {
+    /// Absolute max footprint of a single Tensor buffer in bytes.
+    max_tensor_buffer_bytes: u64,
+    /// Absolute max slice size readable inside a single compute binding in bytes.
+    max_tensor_binding_bytes: u64,
+};
+
 const GpuAllocator = @This();
 
 cpu_allocator: std.mem.Allocator,
@@ -9,6 +16,7 @@ instance: c.WGPUInstance,
 adapter: c.WGPUAdapter,
 device: c.WGPUDevice,
 queue: c.WGPUQueue,
+config: GpuConfig,
 
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
 
@@ -32,13 +40,34 @@ pub fn init(cpu_allocator: std.mem.Allocator) !GpuAllocator {
     const adapter = ctx.adapter orelse return error.NoAdapter;
     errdefer c.wgpuAdapterRelease(adapter);
 
+    // --- QUERY HARDWARE LIMITS ---
+    var supported_limits = std.mem.zeroes(c.WGPULimits);
+    supported_limits.nextInChain = null;
+
+    // Fetch what your physical graphic card can actually handle
+    if (c.wgpuAdapterGetLimits(adapter, &supported_limits) != 1) return error.FailedToGetAdapterLimits;
+
+    const device_descriptor = c.WGPUDeviceDescriptor{
+        .nextInChain = null,
+        .label = sv("TensorCompilerDevice"),
+        .requiredFeatureCount = 0,
+        .requiredFeatures = null,
+        .requiredLimits = &supported_limits,
+    };
+
     _ = c.wgpuAdapterRequestDevice(
         adapter,
-        null,
+        &device_descriptor,
         .{ .callback = onDevice, .userdata1 = &ctx },
     );
     c.wgpuInstanceProcessEvents(instance);
     const device = ctx.device orelse return error.NoDevice;
+
+    // Package configurations into the struct
+    const config = GpuConfig{
+        .max_tensor_buffer_bytes = supported_limits.maxBufferSize,
+        .max_tensor_binding_bytes = supported_limits.maxStorageBufferBindingSize,
+    };
 
     return .{
         .cpu_allocator = cpu_allocator,
@@ -46,6 +75,7 @@ pub fn init(cpu_allocator: std.mem.Allocator) !GpuAllocator {
         .adapter = adapter,
         .device = device,
         .queue = c.wgpuDeviceGetQueue(device),
+        .config = config,
         .tracked_buffers = .init(cpu_allocator),
     };
 }

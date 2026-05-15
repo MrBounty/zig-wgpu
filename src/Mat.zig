@@ -146,18 +146,30 @@ fn dispatch2in1out(
     bytes: u64,
     n: usize,
 ) !void {
-    const bgl = c.wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
-    defer c.wgpuBindGroupLayoutRelease(bgl);
+    // 1. Create a 4-byte Uniform buffer to hold the u32 size
+    const info_buf = try GpuBuffer.init(
+        gloc,
+        @sizeOf(u32),
+        c.WGPUBufferUsage_Uniform | c.WGPUBufferUsage_CopyDst,
+    );
+    defer info_buf.deinit(); // Clean up immediately after the pass submits
 
+    // 2. Cast the usize 'n' to a u32 and write it to the GPU queue
+    const size_payload: u32 = @intCast(n);
+    c.wgpuQueueWriteBuffer(gloc.queue, info_buf.raw, 0, &size_payload, @sizeOf(u32));
+
+    // 3. Create the 4 entries matching your WGSL @binding() tags
     const entries = [_]c.WGPUBindGroupEntry{
         .{ .binding = 0, .buffer = buf_a.raw, .offset = 0, .size = bytes },
         .{ .binding = 1, .buffer = buf_b.raw, .offset = 0, .size = bytes },
         .{ .binding = 2, .buffer = buf_out.raw, .offset = 0, .size = bytes },
+        .{ .binding = 3, .buffer = info_buf.raw, .offset = 0, .size = @sizeOf(u32) }, // <--- The 4th binding!
     };
+
     try submitPass(gloc, pipeline, &entries, n);
 }
 
-/// Create bind group, encode pass, submit. workgroup_size=64.
+/// Create bind group, encode pass, submit.
 fn submitPass(
     gloc: *GpuAllocator,
     pipeline: c.WGPUComputePipeline,
@@ -179,7 +191,14 @@ fn submitPass(
     const pass = c.wgpuCommandEncoderBeginComputePass(enc, null);
     c.wgpuComputePassEncoderSetPipeline(pass, pipeline);
     c.wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, null);
-    c.wgpuComputePassEncoderDispatchWorkgroups(pass, @intCast(ceilDiv(n, 256)), 1, 1);
+
+    const WORKGROUP_SIZE = 256;
+    const MAX_WORKGROUPS = 65535;
+
+    const desired_workgroups = ceilDiv(n, WORKGROUP_SIZE);
+    const dispatch_count = @min(desired_workgroups, MAX_WORKGROUPS);
+
+    c.wgpuComputePassEncoderDispatchWorkgroups(pass, @intCast(dispatch_count), 1, 1);
     c.wgpuComputePassEncoderEnd(pass);
     c.wgpuComputePassEncoderRelease(pass);
 

@@ -7,7 +7,19 @@ pub fn main(init: std.process.Init) !void {
     defer gloc.deinit();
 
     // Define the sizes you want to benchmark
-    const sizes = [_]usize{ 1, 1024, 4096, 16384, 65536, 262144, 1024 * 1024, 4 * 1024 * 1024 };
+    const sizes = [_]usize{
+        1,
+        1024,
+        4096,
+        16384,
+        65536,
+        262144,
+        1024 * 1024,
+        4 * 1024 * 1024,
+        4 * 4 * 1024 * 1024,
+        4 * 4 * 4 * 1024 * 1024,
+        1024 * 1024 * 1024,
+    };
 
     // Print table header
     std.debug.print("\n| Element Count | Size (MB) | Time (ms) | Time (ns) |\n", .{});
@@ -51,11 +63,10 @@ pub fn main(init: std.process.Init) !void {
         defer allocator.free(out_scaled);
 
         try sum.read(&gloc, out_sum);
-        try scaled.read(&gloc, out_scaled);
 
         const duration = start.durationTo(std.Io.Clock.awake.now(init.io));
         const ns = duration.toNanoseconds();
-        const ms = @as(f64, @floatFromInt(ns)) / 1_000_000.0;
+        const ms = duration.toMilliseconds();
         const mb = @as(f64, @floatFromInt(size * @sizeOf(f32))) / (1024.0 * 1024.0);
 
         // Print table row
