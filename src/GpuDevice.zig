@@ -1,9 +1,15 @@
 const std = @import("std");
-const c = @import("c.zig").c;
+const c = @import("utils.zig").c;
+const sv = @import("utils.zig").sv;
 
 const Ctx = struct {
     adapter: c.WGPUAdapter = null,
     device: c.WGPUDevice = null,
+};
+
+const GpuDeviceConfig = struct {
+    /// VRAM limit. Default 2 GB
+    vram_bytes_limit: u64 = 2 * 1024 * 1024 * 1024,
 };
 
 instance: c.WGPUInstance,
@@ -12,11 +18,9 @@ device: c.WGPUDevice,
 queue: c.WGPUQueue,
 limits: c.WGPULimits,
 
-config: struct {
-    vram_bytes_limit: u64 = 10 * 1024 * 1024 * 1024, // 10 GB
-} = .{},
+config: GpuDeviceConfig,
 
-pub fn init() !@This() {
+pub fn init(config: GpuDeviceConfig) !@This() {
     const instance = c.wgpuCreateInstance(
         &std.mem.zeroes(c.WGPUInstanceDescriptor),
     ) orelse return error.NoInstance;
@@ -61,6 +65,7 @@ pub fn init() !@This() {
         .device = device,
         .queue = c.wgpuDeviceGetQueue(device),
         .limits = supported_limits,
+        .config = config,
     };
 }
 
@@ -103,8 +108,4 @@ fn onDevice(
     }
     const ctx: *Ctx = @ptrCast(@alignCast(userdata1.?));
     ctx.device = device;
-}
-
-fn sv(s: []const u8) c.WGPUStringView {
-    return .{ .data = s.ptr, .length = s.len };
 }

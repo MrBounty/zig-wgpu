@@ -1,6 +1,6 @@
 /// Dummy
 const std = @import("std");
-const c = @import("c.zig").c;
+const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
 const GpuDevice = @import("GpuDevice.zig");

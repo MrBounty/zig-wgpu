@@ -1,7 +1,7 @@
 const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
-const c = @import("c.zig").c;
+const c = @import("utils.zig").c;
 
 device: GpuDevice,
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
@@ -39,6 +39,10 @@ pub fn registerBuffer(
         .usage = usage,
         .size = bytes,
     }) orelse return error.BufferAlloc;
+    errdefer {
+        c.wgpuBufferDestroy(buf);
+        c.wgpuBufferRelease(buf);
+    }
 
     try self.tracked_buffers.put(buf, {});
     self.allocated_vram_bytes += bytes;
@@ -50,6 +54,5 @@ pub fn unregisterAndDestroyBuffer(self: *@This(), buf: GpuBuffer) void {
         c.wgpuBufferDestroy(buf.raw);
         c.wgpuBufferRelease(buf.raw);
         self.allocated_vram_bytes -= buf.size;
-        self.device.poll();
     }
 }

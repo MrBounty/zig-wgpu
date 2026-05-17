@@ -4,10 +4,10 @@ const GpuAllocator = @import("GpuAllocator.zig");
 const GpuPipeline = @import("GpuPipeline.zig");
 const Vec = @import("Vec.zig");
 
-const c = @import("c.zig").c;
+const c = @import("utils.zig").c;
 
 pub fn main(init: std.process.Init) !void {
-    const device = try GpuDevice.init();
+    const device = try GpuDevice.init(.{ .vram_bytes_limit = 4 * 1024 * 1024 * 1024 });
     defer device.deinit();
 
     var gloc = try GpuAllocator.init(init.gpa, device);
@@ -41,11 +41,11 @@ pub fn main(init: std.process.Init) !void {
         4 * 4 * 4 * 1024,
         4 * 4 * 4 * 4 * 1024,
         1024 * 1024,
-        4 * 1024 * 1024,
-        4 * 4 * 1024 * 1024,
-        4 * 4 * 4 * 1024 * 1024,
-        4 * 4 * 4 * 4 * 1024 * 1024,
-        4 * 4 * 4 * 4 * 4 * 1024 * 1024,
+        // 4 * 1024 * 1024,
+        // 4 * 4 * 1024 * 1024,
+        // 4 * 4 * 4 * 1024 * 1024,
+        // 4 * 4 * 4 * 4 * 1024 * 1024,
+        // 4 * 4 * 4 * 4 * 4 * 1024 * 1024,
     };
 
     const iterations = 10;
@@ -56,9 +56,9 @@ pub fn main(init: std.process.Init) !void {
 
     for (sizes) |size| {
         // --- Phase 1: Host Init/Alloc (Outside the iteration loop for pure host prep) ---
-        var data_a = try allocator.alloc(f32, size);
+        const data_a = try allocator.alloc(f32, size);
         defer allocator.free(data_a);
-        var data_b = try allocator.alloc(f32, size);
+        const data_b = try allocator.alloc(f32, size);
         defer allocator.free(data_b);
 
         for (0..size) |i| {
@@ -72,7 +72,7 @@ pub fn main(init: std.process.Init) !void {
         var min_compute_ns: u64 = std.math.maxInt(u64);
 
         // Track peak VRAM usage observed during the iterations
-        var peak_vram_bytes: usize = 0;
+        var peak_vram_bytes: u64 = 0;
 
         for (0..iterations) |_| {
             // --- 1. GPU ALLOCATION PHASE ---
@@ -95,9 +95,8 @@ pub fn main(init: std.process.Init) !void {
 
             // All 3 buffers (a, b, sum) are currently resident in VRAM here.
             // Querying now catches the true peak allocation step.
-            if (gloc.allocated_vram_bytes > peak_vram_bytes) {
+            if (gloc.allocated_vram_bytes > peak_vram_bytes)
                 peak_vram_bytes = gloc.allocated_vram_bytes;
-            }
 
             _ = c.wgpuDevicePoll(device.device, 1, null);
 

@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig").c;
+const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 
 raw: c.WGPUBuffer,

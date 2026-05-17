@@ -1,6 +1,7 @@
 const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
-const c = @import("c.zig").c;
+const c = @import("utils.zig").c;
+const sv = @import("utils.zig").sv;
 
 raw: c.WGPUComputePipeline,
 
@@ -21,8 +22,4 @@ pub fn init(device: GpuDevice, wgsl: []const u8) !@This() {
 
 pub fn deinit(self: @This()) void {
     c.wgpuComputePipelineRelease(self.raw);
-}
-
-fn sv(s: []const u8) c.WGPUStringView {
-    return .{ .data = s.ptr, .length = s.len };
 }
