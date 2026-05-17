@@ -4,6 +4,8 @@ const GpuAllocator = @import("GpuAllocator.zig");
 const GpuPipeline = @import("GpuPipeline.zig");
 const Vec = @import("Vec.zig");
 
+const c = @import("c.zig").c;
+
 pub fn main(init: std.process.Init) !void {
     const device = try GpuDevice.init();
     defer device.deinit();
@@ -33,10 +35,10 @@ pub fn main(init: std.process.Init) !void {
     const sizes = [_]usize{
         1,
         1024,
-        4096,
-        16384,
-        65536,
-        262144,
+        4 * 1024,
+        4 * 4 * 1024,
+        4 * 4 * 4 * 1024,
+        4 * 4 * 4 * 4 * 1024,
         1024 * 1024,
         4 * 1024 * 1024,
         4 * 4 * 1024 * 1024,
@@ -88,6 +90,8 @@ pub fn main(init: std.process.Init) !void {
 
             const sum = try a.run(&gloc, b, add_pip);
             defer sum.deinit();
+
+            _ = c.wgpuDevicePoll(device.device, 1, null);
 
             const compute_duration = compute_start.durationTo(std.Io.Clock.awake.now(init.io));
             const compute_ns = @as(u64, @intCast(compute_duration.toNanoseconds()));

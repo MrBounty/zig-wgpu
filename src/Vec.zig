@@ -185,7 +185,6 @@ fn submitPass(
     defer c.wgpuCommandEncoderRelease(enc);
     defer c.wgpuCommandBufferRelease(cmd);
     c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
-    _ = c.wgpuDevicePoll(gloc.device.device, 1, null); // Wait for it to be done
 }
 
 fn ceilDiv(n: usize, d: usize) usize {
