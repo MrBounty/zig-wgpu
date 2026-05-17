@@ -40,7 +40,7 @@ pub fn zeros(gloc: *GpuAllocator, rows: usize, cols: usize) !Mat {
 }
 
 pub fn deinit(self: Mat) void {
-    self.buf.deinit(); // Automatically cleans tracking map & releases GPU memory
+    self.buf.deinit();
 }
 
 pub fn len(self: Mat) usize {
@@ -58,34 +58,7 @@ pub fn add(self: Mat, gloc: *GpuAllocator, other: Mat) !Mat {
     errdefer result.deinit();
 
     const pipeline = try gloc.pipAdd();
-    try dispatch2in1out(gloc, pipeline, self.buf, other.buf, result.buf, self.byteSize(), self.len());
-
-    return result;
-}
-
-pub fn scale(self: Mat, gloc: *GpuAllocator, scalar: f32) !Mat {
-    const result = try Mat.zeros(gloc, self.rows, self.cols);
-    errdefer result.deinit();
-
-    const bytes = self.byteSize();
-    const n = self.len();
-
-    const uni_buf = try GpuBuffer.init(
-        gloc,
-        @sizeOf(f32),
-        c.WGPUBufferUsage_Uniform | c.WGPUBufferUsage_CopyDst,
-    );
-    defer uni_buf.deinit(); // Gracefully deinitializes locally
-
-    c.wgpuQueueWriteBuffer(gloc.queue, uni_buf.raw, 0, &scalar, @sizeOf(f32));
-
-    const pipeline = try gloc.pipScale();
-    const entries = [_]c.WGPUBindGroupEntry{
-        .{ .binding = 0, .buffer = self.buf.raw, .offset = 0, .size = bytes },
-        .{ .binding = 1, .buffer = result.buf.raw, .offset = 0, .size = bytes },
-        .{ .binding = 2, .buffer = uni_buf.raw, .offset = 0, .size = @sizeOf(f32) },
-    };
-    try submitPass(gloc, pipeline, &entries, n);
+    try dispatch2in1out(gloc, pipeline, self.buf, other.buf, result.buf, self.byteSize());
 
     return result;
 }
@@ -144,29 +117,39 @@ fn dispatch2in1out(
     buf_b: GpuBuffer,
     buf_out: GpuBuffer,
     bytes: u64,
-    n: usize,
 ) !void {
-    // 1. Create a 4-byte Uniform buffer to hold the u32 size
-    const info_buf = try GpuBuffer.init(
-        gloc,
-        @sizeOf(u32),
-        c.WGPUBufferUsage_Uniform | c.WGPUBufferUsage_CopyDst,
-    );
-    defer info_buf.deinit(); // Clean up immediately after the pass submits
+    const max_chunk_bytes: u64 = 1024 * 1024 * 1024; // 1 GB
 
-    // 2. Cast the usize 'n' to a u32 and write it to the GPU queue
-    const size_payload: u32 = @intCast(n);
-    c.wgpuQueueWriteBuffer(gloc.queue, info_buf.raw, 0, &size_payload, @sizeOf(u32));
+    var offset: u64 = 0;
+    while (offset < bytes) {
+        // Calculate bounds for the current chunk
+        const current_chunk_bytes = @min(max_chunk_bytes, bytes - offset);
+        const current_chunk_elements: u32 = @intCast(current_chunk_bytes / @sizeOf(f32));
 
-    // 3. Create the 4 entries matching your WGSL @binding() tags
-    const entries = [_]c.WGPUBindGroupEntry{
-        .{ .binding = 0, .buffer = buf_a.raw, .offset = 0, .size = bytes },
-        .{ .binding = 1, .buffer = buf_b.raw, .offset = 0, .size = bytes },
-        .{ .binding = 2, .buffer = buf_out.raw, .offset = 0, .size = bytes },
-        .{ .binding = 3, .buffer = info_buf.raw, .offset = 0, .size = @sizeOf(u32) }, // <--- The 4th binding!
-    };
+        // Create uniform buffer for this specific chunk's size
+        const info_buf = try GpuBuffer.init(
+            gloc,
+            @sizeOf(u32),
+            c.WGPUBufferUsage_Uniform | c.WGPUBufferUsage_CopyDst,
+        );
+        defer info_buf.deinit();
 
-    try submitPass(gloc, pipeline, &entries, n);
+        // Write the number of elements *in this chunk* to the uniform buffer
+        c.wgpuQueueWriteBuffer(gloc.queue, info_buf.raw, 0, &current_chunk_elements, @sizeOf(u32));
+
+        // Bind only the sub-slice for this chunk using `.offset` and `.size`
+        const entries = [_]c.WGPUBindGroupEntry{
+            .{ .binding = 0, .buffer = buf_a.raw, .offset = offset, .size = current_chunk_bytes },
+            .{ .binding = 1, .buffer = buf_b.raw, .offset = offset, .size = current_chunk_bytes },
+            .{ .binding = 2, .buffer = buf_out.raw, .offset = offset, .size = current_chunk_bytes },
+            .{ .binding = 3, .buffer = info_buf.raw, .offset = 0, .size = @sizeOf(u32) },
+        };
+
+        // Submit the pass for this specific chunk
+        try submitPass(gloc, pipeline, &entries, current_chunk_elements);
+
+        offset += current_chunk_bytes;
+    }
 }
 
 /// Create bind group, encode pass, submit.

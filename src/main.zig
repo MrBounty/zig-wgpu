@@ -18,7 +18,8 @@ pub fn main(init: std.process.Init) !void {
         4 * 1024 * 1024,
         4 * 4 * 1024 * 1024,
         4 * 4 * 4 * 1024 * 1024,
-        1024 * 1024 * 1024,
+        4 * 4 * 4 * 4 * 1024 * 1024,
+        4 * 4 * 4 * 4 * 2 * 1024 * 1024,
     };
 
     // Print table header
@@ -51,10 +52,6 @@ pub fn main(init: std.process.Init) !void {
         // a + b
         const sum = try a.add(&gloc, b);
         defer sum.deinit();
-
-        // sum * 2
-        const scaled = try sum.scale(&gloc, 2.0);
-        defer scaled.deinit();
 
         // Read back (allocating dynamically for read-back buffers too)
         const out_sum = try allocator.alloc(f32, size);
