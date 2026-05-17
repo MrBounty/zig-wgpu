@@ -12,6 +12,11 @@ instance: c.WGPUInstance,
 adapter: c.WGPUAdapter,
 device: c.WGPUDevice,
 queue: c.WGPUQueue,
+limits: c.WGPULimits,
+
+config: struct {
+    vram_bytes_limit: u64 = 10 * 1024 * 1024 * 1024, // 10 GB
+} = .{},
 
 pub fn init() !GpuAllocator {
     const instance = c.wgpuCreateInstance(
@@ -57,6 +62,7 @@ pub fn init() !GpuAllocator {
         .adapter = adapter,
         .device = device,
         .queue = c.wgpuDeviceGetQueue(device),
+        .limits = supported_limits,
     };
 }
 

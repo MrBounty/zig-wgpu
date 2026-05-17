@@ -34,6 +34,7 @@ pub fn main(init: std.process.Init) !void {
 
     const sizes = [_]usize{
         1,
+        256,
         1024,
         4 * 1024,
         4 * 4 * 1024,
@@ -44,13 +45,14 @@ pub fn main(init: std.process.Init) !void {
         4 * 4 * 1024 * 1024,
         4 * 4 * 4 * 1024 * 1024,
         4 * 4 * 4 * 4 * 1024 * 1024,
+        4 * 4 * 4 * 4 * 4 * 1024 * 1024,
     };
 
-    const iterations = 5;
+    const iterations = 10;
 
-    // Print clear structural table headers
-    std.debug.print("\n| Size (MB) | Phase             | Time (ms)  |   GB/s   |\n", .{});
-    std.debug.print("|----------:|:------------------|-----------:|---------:|\n", .{});
+    // Updated headers to include VRAM footprint info
+    std.debug.print("\n| Size (MB) | Phase             | Time (ms)  |   GB/s   | VRAM Peak |\n", .{});
+    std.debug.print("|----------:|:------------------|-----------:|---------:|----------:|\n", .{});
 
     for (sizes) |size| {
         // --- Phase 1: Host Init/Alloc (Outside the iteration loop for pure host prep) ---
@@ -69,13 +71,13 @@ pub fn main(init: std.process.Init) !void {
         var min_transfer_ns: u64 = std.math.maxInt(u64);
         var min_compute_ns: u64 = std.math.maxInt(u64);
 
+        // Track peak VRAM usage observed during the iterations
+        var peak_vram_bytes: usize = 0;
+
         for (0..iterations) |_| {
             // --- 1. GPU ALLOCATION PHASE ---
-            // Assumes Vec.init or similar handles uninitialized device allocation if exposed,
-            // otherwise we isolate data movement directly inside the step.
             const alloc_start = std.Io.Clock.awake.now(init.io);
 
-            // (If your Vec API allocates and loads simultaneously, this step doubles as your Host->Device allocation footprint)
             const a = try Vec.initLoad(&gloc, data_a);
             defer a.deinit();
             const b = try Vec.initLoad(&gloc, data_b);
@@ -90,6 +92,12 @@ pub fn main(init: std.process.Init) !void {
 
             const sum = try a.run(&gloc, b, add_pip);
             defer sum.deinit();
+
+            // All 3 buffers (a, b, sum) are currently resident in VRAM here.
+            // Querying now catches the true peak allocation step.
+            if (gloc.allocated_vram_bytes > peak_vram_bytes) {
+                peak_vram_bytes = gloc.allocated_vram_bytes;
+            }
 
             _ = c.wgpuDevicePoll(device.device, 1, null);
 
@@ -119,19 +127,17 @@ pub fn main(init: std.process.Init) !void {
         const transfer_ms = @as(f64, @floatFromInt(min_transfer_ns)) / 1_000_000.0;
 
         // Bandwidth Calculations
-        // Alloc phase moves 2 buffers worth of data from Host -> GPU
         const alloc_gb_s = (element_bytes * 2.0 / 1_000_000_000.0) / (@as(f64, @floatFromInt(min_alloc_ns)) / 1_000_000_000.0);
-
-        // Compute phase performs 2 reads and 1 write completely on VRAM
         const compute_gb_s = (element_bytes * 3.0 / 1_000_000_000.0) / (@as(f64, @floatFromInt(min_compute_ns)) / 1_000_000_000.0);
-
-        // Transfer phase pulls 1 buffer back from GPU -> Host
         const transfer_gb_s = (element_bytes * 1.0 / 1_000_000_000.0) / (@as(f64, @floatFromInt(min_transfer_ns)) / 1_000_000_000.0);
 
-        // Print Results per Size Block
-        std.debug.print("| {d:9.2} | 1. GPU Alloc/Load | {d:10.3} | {d:8.2} |\n", .{ mb, alloc_ms, alloc_gb_s });
-        std.debug.print("|           | 2. Compute        | {d:10.3} | {d:8.2} |\n", .{ compute_ms, compute_gb_s });
-        std.debug.print("|           | 3. Transfer (D->H)| {d:10.3} | {d:8.2} |\n", .{ transfer_ms, transfer_gb_s });
-        std.debug.print("|-----------|-------------------|------------|---------:|\n", .{});
+        // Convert Peak VRAM bytes to Megabytes for clean display
+        const peak_vram_mb = @as(f64, @floatFromInt(peak_vram_bytes)) / (1024.0 * 1024.0);
+
+        // Print Results per Size Block with VRAM column aligned
+        std.debug.print("| {d:9.2} | 1. GPU Alloc/Load | {d:10.3} | {d:8.2} |           |\n", .{ mb, alloc_ms, alloc_gb_s });
+        std.debug.print("|           | 2. Compute        | {d:10.3} | {d:8.2} | {d:7.2} MB|\n", .{ compute_ms, compute_gb_s, peak_vram_mb });
+        std.debug.print("|           | 3. Transfer (D->H)| {d:10.3} | {d:8.2} |           |\n", .{ transfer_ms, transfer_gb_s });
+        std.debug.print("|-----------|-------------------|------------|---------:|----------:|\n", .{});
     }
 }

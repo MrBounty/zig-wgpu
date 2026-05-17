@@ -22,7 +22,7 @@ pub fn init(gloc: *GpuAllocator, bytes: u64, usage: c.WGPUBufferUsage) !GpuBuffe
 
 /// Unregisters from the parent GpuAllocator and cleanly destroys GPU resources
 pub fn deinit(self: GpuBuffer) void {
-    self.gloc.unregisterAndDestroyBuffer(self.raw);
+    self.gloc.unregisterAndDestroyBuffer(self);
 }
 
 /// Native mapAsync wrapper

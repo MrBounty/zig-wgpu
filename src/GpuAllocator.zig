@@ -1,17 +1,17 @@
 const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
+const GpuBuffer = @import("GpuBuffer.zig");
 const c = @import("c.zig").c;
 
 const GpuAllocator = @This();
 
 device: GpuDevice,
-cpu_allocator: std.mem.Allocator,
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
+allocated_vram_bytes: u64 = 0,
 
 pub fn init(cpu_allocator: std.mem.Allocator, device: GpuDevice) !GpuAllocator {
     return .{
         .device = device,
-        .cpu_allocator = cpu_allocator,
         .tracked_buffers = .init(cpu_allocator),
     };
 }
@@ -31,18 +31,27 @@ pub fn registerBuffer(
     bytes: u64,
     usage: c.WGPUBufferUsage,
 ) !c.WGPUBuffer {
+    if (bytes > self.device.limits.maxBufferSize)
+        return error.SingleBufferExceedsLimit;
+
+    if (bytes + self.allocated_vram_bytes > self.device.config.vram_bytes_limit)
+        return error.ExceedsVramBudget;
+
     const buf = c.wgpuDeviceCreateBuffer(self.device.device, &.{
         .usage = usage,
         .size = bytes,
     }) orelse return error.BufferAlloc;
 
     try self.tracked_buffers.put(buf, {});
+    self.allocated_vram_bytes += bytes;
     return buf;
 }
 
-pub fn unregisterAndDestroyBuffer(self: *GpuAllocator, buf: c.WGPUBuffer) void {
-    if (self.tracked_buffers.remove(buf)) {
-        c.wgpuBufferDestroy(buf);
-        c.wgpuBufferRelease(buf);
+pub fn unregisterAndDestroyBuffer(self: *GpuAllocator, buf: GpuBuffer) void {
+    if (self.tracked_buffers.remove(buf.raw)) {
+        c.wgpuBufferDestroy(buf.raw);
+        c.wgpuBufferRelease(buf.raw);
+        self.allocated_vram_bytes -= buf.size;
+        self.device.poll();
     }
 }
