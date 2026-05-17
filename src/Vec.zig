@@ -3,60 +3,54 @@ const std = @import("std");
 const c = @import("c.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
+const GpuDevice = @import("GpuDevice.zig");
 const GpuPipeline = @import("GpuPipeline.zig");
 
-const Mat = @This();
+const Vec = @This();
 
 buf: GpuBuffer,
-rows: usize,
-cols: usize,
+len: usize,
 
-pub fn load(
-    gloc: *GpuAllocator,
-    data: []const f32,
-    rows: usize,
-    cols: usize,
-) !Mat {
-    std.debug.assert(data.len == @as(usize, rows) * cols);
-    const bytes = data.len * @sizeOf(f32);
-
-    // Uses structural constructor initialization
-    const buf = try GpuBuffer.init(
-        gloc,
-        bytes,
-        c.WGPUBufferUsage_Storage | c.WGPUBufferUsage_CopyDst | c.WGPUBufferUsage_CopySrc,
-    );
-
-    c.wgpuQueueWriteBuffer(gloc.device.queue, buf.raw, 0, data.ptr, bytes);
-    return .{ .buf = buf, .rows = rows, .cols = cols };
+pub fn initZero(gloc: *GpuAllocator, len: usize) !Vec {
+    return .{
+        .buf = try GpuBuffer.init(
+            gloc,
+            len * @sizeOf(f32),
+            c.WGPUBufferUsage_Storage | c.WGPUBufferUsage_CopyDst | c.WGPUBufferUsage_CopySrc,
+        ),
+        .len = len,
+    };
 }
 
-pub fn zeros(gloc: *GpuAllocator, rows: usize, cols: usize) !Mat {
-    const bytes: u64 = @as(u64, rows) * cols * @sizeOf(f32);
-    const buf = try GpuBuffer.init(
-        gloc,
-        bytes,
-        c.WGPUBufferUsage_Storage | c.WGPUBufferUsage_CopyDst | c.WGPUBufferUsage_CopySrc,
-    );
-    return .{ .buf = buf, .rows = rows, .cols = cols };
+pub fn initLoad(gloc: *GpuAllocator, data: []const f32) !Vec {
+    var self = try initZero(gloc, data.len);
+    try self.load(gloc.device, data);
+    return self;
 }
 
-pub fn deinit(self: Mat) void {
+pub fn deinit(self: Vec) void {
     self.buf.deinit();
 }
 
-pub fn len(self: Mat) usize {
-    return self.rows * self.cols;
+/// CPU to GPU.
+pub fn load(
+    self: Vec,
+    device: GpuDevice,
+    data: []const f32,
+) !void {
+    std.debug.assert(data.len == self.len);
+    const bytes = data.len * @sizeOf(f32);
+    c.wgpuQueueWriteBuffer(device.queue, self.buf.raw, 0, data.ptr, bytes);
 }
 
-pub fn byteSize(self: Mat) u64 {
-    return @as(u64, self.len()) * @sizeOf(f32);
+pub fn byteSize(self: Vec) u64 {
+    return @as(u64, self.len) * @sizeOf(f32);
 }
 
-pub fn run(self: Mat, gloc: *GpuAllocator, other: Mat, pip: GpuPipeline) !Mat {
-    std.debug.assert(self.rows == other.rows and self.cols == other.cols);
+pub fn run(self: Vec, gloc: *GpuAllocator, other: Vec, pip: GpuPipeline) !Vec {
+    std.debug.assert(self.len == other.len);
 
-    const result = try Mat.zeros(gloc, self.rows, self.cols);
+    const result = try Vec.initZero(gloc, self.len);
     errdefer result.deinit();
 
     try dispatch2in1out(gloc, pip.raw, self.buf, other.buf, result.buf, self.byteSize());
@@ -64,8 +58,9 @@ pub fn run(self: Mat, gloc: *GpuAllocator, other: Mat, pip: GpuPipeline) !Mat {
     return result;
 }
 
-pub fn read(self: Mat, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
-    const out = try alloc.alloc(f32, self.len());
+/// GPU to CPU.
+pub fn read(self: Vec, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
+    const out = try alloc.alloc(f32, self.len);
     const bytes = self.byteSize();
 
     const staging = try GpuBuffer.init(
@@ -94,7 +89,7 @@ pub fn read(self: Mat, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
     const ptr: [*]const f32 = @ptrCast(@alignCast(
         staging.getConstMappedRange(0, bytes),
     ));
-    @memcpy(out[0..self.len()], ptr[0..self.len()]);
+    @memcpy(out[0..self.len], ptr[0..self.len]);
     staging.unmap();
 
     return out;
@@ -109,8 +104,6 @@ fn onMapped(
     const flag: *bool = @ptrCast(@alignCast(userdata1.?));
     flag.* = (status == c.WGPUMapAsyncStatus_Success);
 }
-
-// ── Dispatch helpers ──────────────────────────────────────────────────────────
 
 /// Encode + submit a 2-input, 1-output compute pass (used by add).
 fn dispatch2in1out(

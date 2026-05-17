@@ -2,7 +2,7 @@ const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuPipeline = @import("GpuPipeline.zig");
-const Mat = @import("Mat.zig");
+const Vec = @import("Vec.zig");
 
 pub fn main(init: std.process.Init) !void {
     const device = try GpuDevice.init();
@@ -52,9 +52,9 @@ pub fn main(init: std.process.Init) !void {
         // Start timing the GPU operations
         const start = std.Io.Clock.awake.now(init.io);
 
-        const a = try Mat.load(&gloc, data_a, size, 1);
+        const a = try Vec.initLoad(&gloc, data_a);
         defer a.deinit();
-        const b = try Mat.load(&gloc, data_b, size, 1);
+        const b = try Vec.initLoad(&gloc, data_b);
         defer b.deinit();
 
         // a + b
@@ -71,13 +71,5 @@ pub fn main(init: std.process.Init) !void {
 
         // Print table row
         std.debug.print("| {d:12} | {d:8.2} | {d:9.3} | {d:9} |\n", .{ size, mb, ms, ns });
-    }
-}
-
-fn printMat(data: []const f32, rows: u32, cols: u32) void {
-    for (0..rows) |r| {
-        for (0..cols) |col|
-            std.debug.print("{d:6.0}", .{data[r * cols + col]});
-        std.debug.print("\n", .{});
     }
 }
