@@ -2,13 +2,6 @@ const std = @import("std");
 const sh = @import("shaders.zig");
 const c = @import("c.zig").c;
 
-pub const GpuConfig = struct {
-    /// Absolute max footprint of a single Tensor buffer in bytes.
-    max_tensor_buffer_bytes: u64,
-    /// Absolute max slice size readable inside a single compute binding in bytes.
-    max_tensor_binding_bytes: u64,
-};
-
 const GpuAllocator = @This();
 
 cpu_allocator: std.mem.Allocator,
@@ -16,7 +9,6 @@ instance: c.WGPUInstance,
 adapter: c.WGPUAdapter,
 device: c.WGPUDevice,
 queue: c.WGPUQueue,
-config: GpuConfig,
 
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
 
@@ -63,19 +55,12 @@ pub fn init(cpu_allocator: std.mem.Allocator) !GpuAllocator {
     c.wgpuInstanceProcessEvents(instance);
     const device = ctx.device orelse return error.NoDevice;
 
-    // Package configurations into the struct
-    const config = GpuConfig{
-        .max_tensor_buffer_bytes = supported_limits.maxBufferSize,
-        .max_tensor_binding_bytes = supported_limits.maxStorageBufferBindingSize,
-    };
-
     return .{
         .cpu_allocator = cpu_allocator,
         .instance = instance,
         .adapter = adapter,
         .device = device,
         .queue = c.wgpuDeviceGetQueue(device),
-        .config = config,
         .tracked_buffers = .init(cpu_allocator),
         .pipelines = .{
             .add = try buildPipeline(device, sh.SHADER_ADD),
