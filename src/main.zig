@@ -1,9 +1,13 @@
 const std = @import("std");
+const GpuDevice = @import("GpuDevice.zig");
 const GpuAllocator = @import("GpuAllocator.zig");
 const Mat = @import("Mat.zig");
 
 pub fn main(init: std.process.Init) !void {
-    var gloc = try GpuAllocator.init(init.gpa);
+    const device = try GpuDevice.init();
+    defer device.deinit();
+
+    var gloc = try GpuAllocator.init(init.gpa, device);
     defer gloc.deinit();
 
     // Define the sizes you want to benchmark
@@ -15,11 +19,11 @@ pub fn main(init: std.process.Init) !void {
         65536,
         262144,
         1024 * 1024,
-        4 * 1024 * 1024,
-        4 * 4 * 1024 * 1024,
-        4 * 4 * 4 * 1024 * 1024,
-        4 * 4 * 4 * 4 * 1024 * 1024,
-        4 * 4 * 4 * 4 * 2 * 1024 * 1024,
+        // 4 * 1024 * 1024,
+        // 4 * 4 * 1024 * 1024,
+        // 4 * 4 * 4 * 1024 * 1024,
+        // 4 * 4 * 4 * 4 * 1024 * 1024,
+        // 4 * 4 * 4 * 4 * 2 * 1024 * 1024,
     };
 
     // Print table header

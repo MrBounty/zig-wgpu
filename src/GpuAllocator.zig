@@ -1,69 +1,24 @@
 const std = @import("std");
 const sh = @import("shaders.zig");
+const GpuDevice = @import("GpuDevice.zig");
 const c = @import("c.zig").c;
 
 const GpuAllocator = @This();
 
+device: GpuDevice,
 cpu_allocator: std.mem.Allocator,
-instance: c.WGPUInstance,
-adapter: c.WGPUAdapter,
-device: c.WGPUDevice,
-queue: c.WGPUQueue,
-
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
-
 pipelines: struct {
     add: c.WGPUComputePipeline,
 },
 
-pub fn init(cpu_allocator: std.mem.Allocator) !GpuAllocator {
-    const instance = c.wgpuCreateInstance(
-        &std.mem.zeroes(c.WGPUInstanceDescriptor),
-    ) orelse return error.NoInstance;
-    errdefer c.wgpuInstanceRelease(instance);
-
-    var ctx = Ctx{};
-    _ = c.wgpuInstanceRequestAdapter(
-        instance,
-        &.{ .powerPreference = c.WGPUPowerPreference_HighPerformance },
-        .{ .callback = onAdapter, .userdata1 = &ctx },
-    );
-    c.wgpuInstanceProcessEvents(instance);
-    const adapter = ctx.adapter orelse return error.NoAdapter;
-    errdefer c.wgpuAdapterRelease(adapter);
-
-    // --- QUERY HARDWARE LIMITS ---
-    var supported_limits = std.mem.zeroes(c.WGPULimits);
-    supported_limits.nextInChain = null;
-
-    // Fetch what your physical graphic card can actually handle
-    if (c.wgpuAdapterGetLimits(adapter, &supported_limits) != 1) return error.FailedToGetAdapterLimits;
-
-    const device_descriptor = c.WGPUDeviceDescriptor{
-        .nextInChain = null,
-        .label = sv("TensorCompilerDevice"),
-        .requiredFeatureCount = 0,
-        .requiredFeatures = null,
-        .requiredLimits = &supported_limits,
-    };
-
-    _ = c.wgpuAdapterRequestDevice(
-        adapter,
-        &device_descriptor,
-        .{ .callback = onDevice, .userdata1 = &ctx },
-    );
-    c.wgpuInstanceProcessEvents(instance);
-    const device = ctx.device orelse return error.NoDevice;
-
+pub fn init(cpu_allocator: std.mem.Allocator, device: GpuDevice) !GpuAllocator {
     return .{
-        .cpu_allocator = cpu_allocator,
-        .instance = instance,
-        .adapter = adapter,
         .device = device,
-        .queue = c.wgpuDeviceGetQueue(device),
+        .cpu_allocator = cpu_allocator,
         .tracked_buffers = .init(cpu_allocator),
         .pipelines = .{
-            .add = try buildPipeline(device, sh.SHADER_ADD),
+            .add = try buildPipeline(device.device, sh.SHADER_ADD),
         },
     };
 }
@@ -79,11 +34,6 @@ pub fn deinit(self: *GpuAllocator) void {
         c.wgpuBufferRelease(buf);
     }
     self.tracked_buffers.deinit();
-
-    c.wgpuQueueRelease(self.queue);
-    c.wgpuDeviceRelease(self.device);
-    c.wgpuAdapterRelease(self.adapter);
-    c.wgpuInstanceRelease(self.instance);
 }
 
 pub fn registerBuffer(
@@ -91,7 +41,7 @@ pub fn registerBuffer(
     bytes: u64,
     usage: c.WGPUBufferUsage,
 ) !c.WGPUBuffer {
-    const buf = c.wgpuDeviceCreateBuffer(self.device, &.{
+    const buf = c.wgpuDeviceCreateBuffer(self.device.device, &.{
         .usage = usage,
         .size = bytes,
     }) orelse return error.BufferAlloc;
@@ -105,59 +55,6 @@ pub fn unregisterAndDestroyBuffer(self: *GpuAllocator, buf: c.WGPUBuffer) void {
         c.wgpuBufferDestroy(buf);
         c.wgpuBufferRelease(buf);
     }
-}
-
-// ── Internal ─────────────────────────────────────────────────────────────
-
-pub fn makeBuffer(
-    self: *GpuAllocator,
-    bytes: u64,
-    usage: c.WGPUBufferUsage,
-) !c.WGPUBuffer {
-    return c.wgpuDeviceCreateBuffer(self.device, &.{
-        .usage = usage,
-        .size = bytes,
-    }) orelse error.BufferAlloc;
-}
-
-/// Poll until GPU work completes. Use after submit if you need CPU sync.
-pub fn poll(self: *GpuAllocator) void {
-    _ = c.wgpuDevicePoll(self.device, 1, null);
-}
-
-const Ctx = struct {
-    adapter: c.WGPUAdapter = null,
-    device: c.WGPUDevice = null,
-};
-
-fn onAdapter(
-    status: c.WGPURequestAdapterStatus,
-    adapter: c.WGPUAdapter,
-    _: c.WGPUStringView,
-    userdata1: ?*anyopaque,
-    _: ?*anyopaque,
-) callconv(.c) void {
-    if (status != c.WGPURequestAdapterStatus_Success) {
-        std.log.err("Adapter request failed (status={d})", .{status});
-        return;
-    }
-    const ctx: *Ctx = @ptrCast(@alignCast(userdata1.?));
-    ctx.adapter = adapter;
-}
-
-fn onDevice(
-    status: c.WGPURequestDeviceStatus,
-    device: c.WGPUDevice,
-    _: c.WGPUStringView,
-    userdata1: ?*anyopaque,
-    _: ?*anyopaque,
-) callconv(.c) void {
-    if (status != c.WGPURequestDeviceStatus_Success) {
-        std.log.err("Device request failed (status={d})", .{status});
-        return;
-    }
-    const ctx: *Ctx = @ptrCast(@alignCast(userdata1.?));
-    ctx.device = device;
 }
 
 fn buildPipeline(device: c.WGPUDevice, wgsl: []const u8) !c.WGPUComputePipeline {

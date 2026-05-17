@@ -26,7 +26,7 @@ pub fn load(
         c.WGPUBufferUsage_Storage | c.WGPUBufferUsage_CopyDst | c.WGPUBufferUsage_CopySrc,
     );
 
-    c.wgpuQueueWriteBuffer(gloc.queue, buf.raw, 0, data.ptr, bytes);
+    c.wgpuQueueWriteBuffer(gloc.device.queue, buf.raw, 0, data.ptr, bytes);
     return .{ .buf = buf, .rows = rows, .cols = cols };
 }
 
@@ -74,12 +74,12 @@ pub fn read(self: Mat, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
     );
     defer staging.deinit();
 
-    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device, null) orelse return error.Encoder;
+    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse return error.Encoder;
     c.wgpuCommandEncoderCopyBufferToBuffer(enc, self.buf.raw, 0, staging.raw, 0, bytes);
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandEncoderRelease(enc);
     defer c.wgpuCommandBufferRelease(cmd);
-    c.wgpuQueueSubmit(gloc.queue, 1, &cmd);
+    c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
 
     var mapped = false;
     staging.mapAsync(
@@ -88,7 +88,7 @@ pub fn read(self: Mat, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
         bytes,
         .{ .callback = onMapped, .userdata1 = &mapped },
     );
-    while (!mapped) gloc.poll();
+    while (!mapped) gloc.device.poll();
 
     const ptr: [*]const f32 = @ptrCast(@alignCast(
         staging.getConstMappedRange(0, bytes),
@@ -137,7 +137,7 @@ fn dispatch2in1out(
         defer info_buf.deinit();
 
         // Write the number of elements *in this chunk* to the uniform buffer
-        c.wgpuQueueWriteBuffer(gloc.queue, info_buf.raw, 0, &current_chunk_elements, @sizeOf(u32));
+        c.wgpuQueueWriteBuffer(gloc.device.queue, info_buf.raw, 0, &current_chunk_elements, @sizeOf(u32));
 
         // Bind only the sub-slice for this chunk using `.offset` and `.size`
         const entries = [_]c.WGPUBindGroupEntry{
@@ -164,14 +164,14 @@ fn submitPass(
     const bgl = c.wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
     defer c.wgpuBindGroupLayoutRelease(bgl);
 
-    const bg = c.wgpuDeviceCreateBindGroup(gloc.device, &.{
+    const bg = c.wgpuDeviceCreateBindGroup(gloc.device.device, &.{
         .layout = bgl,
         .entries = entries.ptr,
         .entryCount = entries.len,
     }) orelse return error.BindGroup;
     defer c.wgpuBindGroupRelease(bg);
 
-    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device, null) orelse
+    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse
         return error.Encoder;
     const pass = c.wgpuCommandEncoderBeginComputePass(enc, null);
     c.wgpuComputePassEncoderSetPipeline(pass, pipeline);
@@ -190,7 +190,7 @@ fn submitPass(
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandEncoderRelease(enc);
     defer c.wgpuCommandBufferRelease(cmd);
-    c.wgpuQueueSubmit(gloc.queue, 1, &cmd);
+    c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
 }
 
 fn ceilDiv(n: usize, d: usize) usize {
