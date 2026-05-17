@@ -53,13 +53,8 @@ pub fn main(init: std.process.Init) !void {
         const sum = try a.add(&gloc, b);
         defer sum.deinit();
 
-        // Read back (allocating dynamically for read-back buffers too)
-        const out_sum = try allocator.alloc(f32, size);
-        defer allocator.free(out_sum);
-        const out_scaled = try allocator.alloc(f32, size);
-        defer allocator.free(out_scaled);
-
-        try sum.read(&gloc, out_sum);
+        const out = try sum.read(&gloc, allocator);
+        defer allocator.free(out);
 
         const duration = start.durationTo(std.Io.Clock.awake.now(init.io));
         const ns = duration.toNanoseconds();

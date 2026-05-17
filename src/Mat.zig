@@ -1,3 +1,4 @@
+/// Dummy
 const std = @import("std");
 const c = @import("c.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
@@ -62,8 +63,8 @@ pub fn add(self: Mat, gloc: *GpuAllocator, other: Mat) !Mat {
     return result;
 }
 
-pub fn read(self: Mat, gloc: *GpuAllocator, out: []f32) !void {
-    std.debug.assert(out.len >= self.len());
+pub fn read(self: Mat, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
+    const out = try alloc.alloc(f32, self.len());
     const bytes = self.byteSize();
 
     const staging = try GpuBuffer.init(
@@ -94,6 +95,8 @@ pub fn read(self: Mat, gloc: *GpuAllocator, out: []f32) !void {
     ));
     @memcpy(out[0..self.len()], ptr[0..self.len()]);
     staging.unmap();
+
+    return out;
 }
 
 fn onMapped(
