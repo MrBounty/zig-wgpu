@@ -3,6 +3,7 @@ const std = @import("std");
 const c = @import("c.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
+const GpuPipeline = @import("GpuPipeline.zig");
 
 const Mat = @This();
 
@@ -52,13 +53,13 @@ pub fn byteSize(self: Mat) u64 {
     return @as(u64, self.len()) * @sizeOf(f32);
 }
 
-pub fn add(self: Mat, gloc: *GpuAllocator, other: Mat) !Mat {
+pub fn run(self: Mat, gloc: *GpuAllocator, other: Mat, pip: GpuPipeline) !Mat {
     std.debug.assert(self.rows == other.rows and self.cols == other.cols);
 
     const result = try Mat.zeros(gloc, self.rows, self.cols);
     errdefer result.deinit();
 
-    try dispatch2in1out(gloc, gloc.pipelines.add, self.buf, other.buf, result.buf, self.byteSize());
+    try dispatch2in1out(gloc, pip.raw, self.buf, other.buf, result.buf, self.byteSize());
 
     return result;
 }

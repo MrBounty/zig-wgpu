@@ -1,6 +1,7 @@
 const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
 const GpuAllocator = @import("GpuAllocator.zig");
+const GpuPipeline = @import("GpuPipeline.zig");
 const Mat = @import("Mat.zig");
 
 pub fn main(init: std.process.Init) !void {
@@ -9,6 +10,9 @@ pub fn main(init: std.process.Init) !void {
 
     var gloc = try GpuAllocator.init(init.gpa, device);
     defer gloc.deinit();
+
+    const add_pip = try GpuPipeline.init(device, @embedFile("shaders/add.wgsl"));
+    defer add_pip.deinit();
 
     // Define the sizes you want to benchmark
     const sizes = [_]usize{
@@ -54,7 +58,7 @@ pub fn main(init: std.process.Init) !void {
         defer b.deinit();
 
         // a + b
-        const sum = try a.add(&gloc, b);
+        const sum = try a.run(&gloc, b, add_pip);
         defer sum.deinit();
 
         const out = try sum.read(&gloc, allocator);

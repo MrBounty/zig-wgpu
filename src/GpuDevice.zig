@@ -1,5 +1,4 @@
 const std = @import("std");
-const sh = @import("shaders.zig");
 const c = @import("c.zig").c;
 
 const Ctx = struct {
