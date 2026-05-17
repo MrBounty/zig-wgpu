@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/bench.zig"),
             .link_libc = true,
             .target = target,
             .optimize = optimize,
@@ -57,5 +57,5 @@ pub fn build(b: *std.Build) void {
 
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
-    b.step("run", "Build and run").dependOn(&run.step);
+    b.step("bench", "Benchmark a simple add vector").dependOn(&run.step);
 }
