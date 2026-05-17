@@ -6,8 +6,6 @@ const Ctx = struct {
     device: c.WGPUDevice = null,
 };
 
-const GpuAllocator = @This();
-
 instance: c.WGPUInstance,
 adapter: c.WGPUAdapter,
 device: c.WGPUDevice,
@@ -18,7 +16,7 @@ config: struct {
     vram_bytes_limit: u64 = 10 * 1024 * 1024 * 1024, // 10 GB
 } = .{},
 
-pub fn init() !GpuAllocator {
+pub fn init() !@This() {
     const instance = c.wgpuCreateInstance(
         &std.mem.zeroes(c.WGPUInstanceDescriptor),
     ) orelse return error.NoInstance;
@@ -66,14 +64,14 @@ pub fn init() !GpuAllocator {
     };
 }
 
-pub fn deinit(self: GpuAllocator) void {
+pub fn deinit(self: @This()) void {
     c.wgpuQueueRelease(self.queue);
     c.wgpuDeviceRelease(self.device);
     c.wgpuAdapterRelease(self.adapter);
     c.wgpuInstanceRelease(self.instance);
 }
 
-pub fn poll(self: *GpuAllocator) void {
+pub fn poll(self: *@This()) void {
     _ = c.wgpuDevicePoll(self.device, 1, null);
 }
 

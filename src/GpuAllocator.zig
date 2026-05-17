@@ -3,20 +3,18 @@ const GpuDevice = @import("GpuDevice.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
 const c = @import("c.zig").c;
 
-const GpuAllocator = @This();
-
 device: GpuDevice,
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
 allocated_vram_bytes: u64 = 0,
 
-pub fn init(cpu_allocator: std.mem.Allocator, device: GpuDevice) !GpuAllocator {
+pub fn init(cpu_allocator: std.mem.Allocator, device: GpuDevice) !@This() {
     return .{
         .device = device,
         .tracked_buffers = .init(cpu_allocator),
     };
 }
 
-pub fn deinit(self: *GpuAllocator) void {
+pub fn deinit(self: *@This()) void {
     var it = self.tracked_buffers.keyIterator();
     while (it.next()) |buf_ptr| {
         const buf = buf_ptr.*;
@@ -27,7 +25,7 @@ pub fn deinit(self: *GpuAllocator) void {
 }
 
 pub fn registerBuffer(
-    self: *GpuAllocator,
+    self: *@This(),
     bytes: u64,
     usage: c.WGPUBufferUsage,
 ) !c.WGPUBuffer {
@@ -47,7 +45,7 @@ pub fn registerBuffer(
     return buf;
 }
 
-pub fn unregisterAndDestroyBuffer(self: *GpuAllocator, buf: GpuBuffer) void {
+pub fn unregisterAndDestroyBuffer(self: *@This(), buf: GpuBuffer) void {
     if (self.tracked_buffers.remove(buf.raw)) {
         c.wgpuBufferDestroy(buf.raw);
         c.wgpuBufferRelease(buf.raw);
