@@ -57,8 +57,7 @@ pub fn add(self: Mat, gloc: *GpuAllocator, other: Mat) !Mat {
     const result = try Mat.zeros(gloc, self.rows, self.cols);
     errdefer result.deinit();
 
-    const pipeline = try gloc.pipAdd();
-    try dispatch2in1out(gloc, pipeline, self.buf, other.buf, result.buf, self.byteSize());
+    try dispatch2in1out(gloc, gloc.pipelines.add, self.buf, other.buf, result.buf, self.byteSize());
 
     return result;
 }

@@ -20,9 +20,9 @@ config: GpuConfig,
 
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
 
-// Lazily created, cached for lifetime of allocator
-_pip_add: c.WGPUComputePipeline = null,
-_pip_scale: c.WGPUComputePipeline = null,
+pipelines: struct {
+    add: c.WGPUComputePipeline,
+},
 
 pub fn init(cpu_allocator: std.mem.Allocator) !GpuAllocator {
     const instance = c.wgpuCreateInstance(
@@ -77,12 +77,15 @@ pub fn init(cpu_allocator: std.mem.Allocator) !GpuAllocator {
         .queue = c.wgpuDeviceGetQueue(device),
         .config = config,
         .tracked_buffers = .init(cpu_allocator),
+        .pipelines = .{
+            .add = try buildPipeline(device, sh.SHADER_ADD),
+        },
     };
 }
 
 pub fn deinit(self: *GpuAllocator) void {
-    if (self._pip_add) |p| c.wgpuComputePipelineRelease(p);
-    if (self._pip_scale) |p| c.wgpuComputePipelineRelease(p);
+    inline for (@typeInfo(@TypeOf(self.pipelines)).@"struct".fields) |field|
+        c.wgpuComputePipelineRelease(@field(self.pipelines, field.name));
 
     var it = self.tracked_buffers.keyIterator();
     while (it.next()) |buf_ptr| {
@@ -130,18 +133,6 @@ pub fn makeBuffer(
         .usage = usage,
         .size = bytes,
     }) orelse error.BufferAlloc;
-}
-
-pub fn pipAdd(self: *GpuAllocator) !c.WGPUComputePipeline {
-    if (self._pip_add == null)
-        self._pip_add = try buildPipeline(self.device, sh.SHADER_ADD);
-    return self._pip_add.?;
-}
-
-pub fn pipScale(self: *GpuAllocator) !c.WGPUComputePipeline {
-    if (self._pip_scale == null)
-        self._pip_scale = try buildPipeline(self.device, sh.SHADER_SCALE);
-    return self._pip_scale.?;
 }
 
 /// Poll until GPU work completes. Use after submit if you need CPU sync.
