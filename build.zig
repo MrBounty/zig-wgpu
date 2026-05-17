@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         }),
-        .name = "gpu_matrix_add",
+        .name = "bench",
     });
 
     // wgpu-native headers + pre-built static library
@@ -57,5 +57,38 @@ pub fn build(b: *std.Build) void {
 
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
-    b.step("bench", "Benchmark a simple add vector").dependOn(&run.step);
+    b.step("bench", "Benchmark a simple add vector.").dependOn(&run.step);
+
+    const exe_examp = b.addExecutable(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/example.zig"),
+            .link_libc = true,
+            .target = target,
+            .optimize = optimize,
+        }),
+        .name = "bench",
+    });
+
+    // wgpu-native headers + pre-built static library
+    exe_examp.root_module.addIncludePath(b.path("libs/wgpu-native/include"));
+    exe_examp.root_module.addLibraryPath(b.path("libs/wgpu-native/lib"));
+    exe_examp.root_module.addObjectFile(b.path("libs/wgpu-native/lib/libwgpu_native.a"));
+
+    if (t.os.tag == .macos) {
+        exe_examp.root_module.linkFramework("Metal", .{});
+        exe_examp.root_module.linkFramework("QuartzCore", .{});
+        exe_examp.root_module.linkFramework("Foundation", .{});
+        exe_examp.root_module.linkFramework("CoreGraphics", .{});
+    } else if (t.os.tag == .windows) {
+        exe_examp.root_module.linkSystemLibrary("d3d12", .{});
+        exe_examp.root_module.linkSystemLibrary("dxgi", .{});
+        exe_examp.root_module.linkSystemLibrary("user32", .{});
+    } else {
+        exe_examp.root_module.linkSystemLibrary("vulkan", .{});
+        exe_examp.root_module.linkSystemLibrary("gcc_s", .{});
+    }
+
+    const examp = b.addRunArtifact(exe_examp);
+    run.step.dependOn(b.getInstallStep());
+    b.step("example", "Run basic example.").dependOn(&examp.step);
 }
