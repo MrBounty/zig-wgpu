@@ -68,3 +68,11 @@ pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopa
 pub fn unmap(self: @This()) void {
     c.wgpuBufferUnmap(self.raw);
 }
+
+/// CPU to GPU.
+pub fn load(
+    self: @This(),
+    data: []const f16,
+) !void {
+    c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.size);
+}

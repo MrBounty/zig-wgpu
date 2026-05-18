@@ -26,7 +26,7 @@ pub fn initZero(gloc: GpuAllocator, len: usize) !Vec {
 // Changed: gloc is passed by value
 pub fn initLoad(gloc: GpuAllocator, data: []const f16) !Vec {
     var self = try initZero(gloc, data.len);
-    try self.load(gloc.device, data); // Direct access via the interface copy
+    try self.load(data); // Direct access via the interface copy
     return self;
 }
 
@@ -37,12 +37,9 @@ pub fn deinit(self: Vec) void {
 /// CPU to GPU.
 pub fn load(
     self: Vec,
-    device: GpuDevice,
     data: []const f16,
 ) !void {
-    std.debug.assert(data.len == self.len);
-    const bytes = self.byteSize();
-    c.wgpuQueueWriteBuffer(device.queue, self.buf.raw, 0, data.ptr, bytes);
+    try self.buf.load(data);
 }
 
 pub fn byteSize(self: Vec) u64 {
