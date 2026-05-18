@@ -19,8 +19,8 @@ Below is a complete, self-contained example demonstrating how to initialize the 
 const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
 const GpuArena = @import("GpuArena.zig");
+const GpuBuffer = @import("GpuBuffer.zig");
 const GpuProcess = @import("GpuProcess.zig");
-// Note: Assuming Vec is implemented via GpuBuffer as shown in example.zig
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
@@ -29,44 +29,51 @@ pub fn main(init: std.process.Init) !void {
     const device = try GpuDevice.init(.{});
     defer device.deinit();
 
-    // 2. Create a GPU Arena to hold GPU memory
+    // 2. Create a GPU Arena to manage VRAM
     var grena = GpuArena.init(allocator, device);
     defer grena.deinit();
     const gloc = grena.gpuAllocator();
 
-    // 3. Create a GPU process that loads the WGSL pipeline/shader
-    const add = try GpuProcess.init(device, @embedFile("shaders/add.wgsl"));
-    defer add.deinit();
+    // 3. Load the WGSL compute pipeline
+    const add_process = try GpuProcess.init(device, @embedFile("shaders/add.wgsl"));
+    defer add_process.deinit();
 
-    // 4. Allocate and populate CPU memory
-    const data_a = try allocator.alloc(f16, 16);
+    // 4. Setup CPU data
+    const len: usize = 16;
+    const data_a = try allocator.alloc(f16, len);
     defer allocator.free(data_a);
-    const data_b = try allocator.alloc(f16, 16);
+    const data_b = try allocator.alloc(f16, len);
     defer allocator.free(data_b);
 
-    for (0..16) |i| {
+    for (0..len) |i| {
         data_a[i] = @floatFromInt(i);
-        data_b[i] = @floatFromInt(16 - 1 - i);
+        data_b[i] = @floatFromInt(len - 1 - i);
     }
 
-    // 5. Allocate GPU memory (deinit handled automatically by grena)
-    const a = try Vec.initZero(gloc, 16);
-    const b = try Vec.initZero(gloc, 16);
+    // 5. Initialize raw GPU Buffers
+    // We pass the EnumSet inline using `.initMany` since the Enum itself isn't exported
+    const byte_size = len * @sizeOf(f16);
+    const buf_a = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
+    const buf_b = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
+    const buf_out = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
 
-    // 6. Load CPU -> GPU
-    try a.load(data_a);
-    try b.load(data_b);
+    // Note: The buffers are safely tied to the GpuArena which will automatically
+    // release them at the end. You can also manually call buf_x.deinit() if desired.
 
-    // 7. Run GPU Pipeline
-    const sum = try a.run(gloc, b, add);
+    // 6. Transfer data from CPU slices to GPU Buffers
+    try buf_a.load(f16, data_a);
+    try buf_b.load(f16, data_b);
 
-    // 8. Read GPU -> CPU
-    const out = try sum.read(allocator);
+    // 7. Dispatch the Compute Process
+    // We pass the data type (f16) to allow GpuProcess to calculate chunks correctly
+    try add_process.run(gloc, f16, buf_a, buf_b, buf_out);
+
+    // 8. Map and copy the resulting buffer back to the CPU
+    const out = try buf_out.read(allocator, f16);
     defer allocator.free(out);
 
-    std.debug.print("{any}\n", .{out});
+    std.debug.print("Result: {any}\n", .{out});
 }
-
 ```
 
 ## Dependencies
