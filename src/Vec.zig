@@ -1,4 +1,3 @@
-/// Dummy
 const std = @import("std");
 const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
@@ -11,7 +10,8 @@ const Vec = @This();
 buf: GpuBuffer,
 len: usize,
 
-pub fn initZero(gloc: *GpuAllocator, len: usize) !Vec {
+// Changed: gloc is passed by value (const)
+pub fn initZero(gloc: GpuAllocator, len: usize) !Vec {
     return .{
         .buf = try GpuBuffer.init(
             gloc,
@@ -23,9 +23,10 @@ pub fn initZero(gloc: *GpuAllocator, len: usize) !Vec {
     };
 }
 
-pub fn initLoad(gloc: *GpuAllocator, data: []const f16) !Vec {
+// Changed: gloc is passed by value
+pub fn initLoad(gloc: GpuAllocator, data: []const f16) !Vec {
     var self = try initZero(gloc, data.len);
-    try self.load(gloc.device, data);
+    try self.load(gloc.device, data); // Direct access via the interface copy
     return self;
 }
 
@@ -48,7 +49,8 @@ pub fn byteSize(self: Vec) u64 {
     return @as(u64, self.len) * @sizeOf(f16);
 }
 
-pub fn run(self: Vec, gloc: *GpuAllocator, other: Vec, pip: GpuPipeline) !Vec {
+// Changed: gloc is passed by value instead of *GpuAllocator
+pub fn run(self: Vec, gloc: GpuAllocator, other: Vec, pip: GpuPipeline) !Vec {
     std.debug.assert(self.len == other.len);
 
     const result = try Vec.initZero(gloc, self.len);
@@ -59,8 +61,8 @@ pub fn run(self: Vec, gloc: *GpuAllocator, other: Vec, pip: GpuPipeline) !Vec {
     return result;
 }
 
-/// GPU to CPU.
-pub fn read(self: Vec, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f16 {
+// Changed: gloc is passed by value instead of *GpuAllocator
+pub fn read(self: Vec, gloc: GpuAllocator, alloc: std.mem.Allocator) ![]f16 {
     const out = try alloc.alloc(f16, self.len);
     const bytes = self.byteSize();
 
@@ -107,9 +109,9 @@ fn onMapped(
     flag.* = (status == c.WGPUMapAsyncStatus_Success);
 }
 
-/// Encode + submit a 2-input, 1-output compute pass (used by add).
+// Changed: gloc is passed by value instead of *GpuAllocator
 fn dispatch2in1out(
-    gloc: *GpuAllocator,
+    gloc: GpuAllocator,
     pipeline: c.WGPUComputePipeline,
     buf_a: GpuBuffer,
     buf_b: GpuBuffer,
@@ -120,11 +122,9 @@ fn dispatch2in1out(
 
     var offset: u64 = 0;
     while (offset < bytes) {
-        // Calculate bounds for the current chunk
         const current_chunk_bytes = @min(max_chunk_bytes, bytes - offset);
         const current_chunk_elements: u32 = @intCast(current_chunk_bytes / @sizeOf(f16));
 
-        // Create uniform buffer for this specific chunk's size
         const info_buf = try GpuBuffer.init(
             gloc,
             u32,
@@ -133,10 +133,8 @@ fn dispatch2in1out(
         );
         defer info_buf.deinit();
 
-        // Write the number of elements *in this chunk* to the uniform buffer
         c.wgpuQueueWriteBuffer(gloc.device.queue, info_buf.raw, 0, &current_chunk_elements, @sizeOf(u32));
 
-        // Bind only the sub-slice for this chunk using `.offset` and `.size`
         const entries = [_]c.WGPUBindGroupEntry{
             .{ .binding = 0, .buffer = buf_a.raw, .offset = offset, .size = current_chunk_bytes },
             .{ .binding = 1, .buffer = buf_b.raw, .offset = offset, .size = current_chunk_bytes },
@@ -144,16 +142,15 @@ fn dispatch2in1out(
             .{ .binding = 3, .buffer = info_buf.raw, .offset = 0, .size = @sizeOf(u32) },
         };
 
-        // Submit the pass for this specific chunk
         try submitPass(gloc, pipeline, &entries, current_chunk_elements);
 
         offset += current_chunk_bytes;
     }
 }
 
-/// Create bind group, encode pass, submit.
+// Changed: gloc is passed by value instead of *GpuAllocator
 fn submitPass(
-    gloc: *GpuAllocator,
+    gloc: GpuAllocator,
     pipeline: c.WGPUComputePipeline,
     entries: []const c.WGPUBindGroupEntry,
     n: usize,

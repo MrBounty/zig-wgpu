@@ -87,7 +87,7 @@ pub fn deinit(self: @This()) void {
     c.wgpuInstanceRelease(self.instance);
 }
 
-pub fn poll(self: *@This()) void {
+pub fn poll(self: @This()) void {
     _ = c.wgpuDevicePoll(self.device, 1, null);
 }
 

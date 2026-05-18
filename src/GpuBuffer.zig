@@ -5,7 +5,7 @@ const GpuAllocator = @import("GpuAllocator.zig");
 raw: c.WGPUBuffer,
 size: u64,
 usage: c.WGPUBufferUsage,
-gloc: *GpuAllocator,
+gloc: GpuAllocator,
 
 const BufferUsage = enum(u64) {
     None = 0x0000000000000000,
@@ -22,7 +22,7 @@ const BufferUsage = enum(u64) {
 };
 
 /// Allocates the underlying WebGPU handle and registers it to the parent GpuAllocator
-pub fn init(gloc: *GpuAllocator, T: type, len: usize, usage: std.EnumSet(BufferUsage)) !@This() {
+pub fn init(gloc: GpuAllocator, T: type, len: usize, usage: std.EnumSet(BufferUsage)) !@This() {
     switch (@typeInfo(T)) {
         .int, .float => {},
         else => @compileError("GpuBuffer can only use int and float type"),
@@ -33,7 +33,7 @@ pub fn init(gloc: *GpuAllocator, T: type, len: usize, usage: std.EnumSet(BufferU
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
     const bytes = @sizeOf(T) * len;
-    const raw_handle = try gloc.registerBuffer(bytes, use);
+    const raw_handle = try gloc.allocBuffer(bytes, use);
 
     return .{
         .raw = raw_handle,
@@ -45,7 +45,7 @@ pub fn init(gloc: *GpuAllocator, T: type, len: usize, usage: std.EnumSet(BufferU
 
 /// Unregisters from the parent GpuAllocator and cleanly destroys GPU resources
 pub fn deinit(self: @This()) void {
-    self.gloc.unregisterAndDestroyBuffer(self);
+    self.gloc.freeBuffer(self.raw, self.size);
 }
 
 /// Native mapAsync wrapper
