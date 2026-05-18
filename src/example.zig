@@ -41,7 +41,7 @@ pub fn main(init: std.process.Init) !void {
 
     std.debug.print("Bytes used: {d} (3 * {d})\n", .{ grena.allocated_vram_bytes, a.byteSize() });
 
-    const out = try sum.read(gloc, allocator);
+    const out = try sum.read(allocator);
     defer allocator.free(out);
 
     std.debug.print("{any}\n", .{out});

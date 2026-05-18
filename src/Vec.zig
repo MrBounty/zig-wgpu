@@ -15,8 +15,7 @@ pub fn initZero(gloc: GpuAllocator, len: usize) !Vec {
     return .{
         .buf = try GpuBuffer.init(
             gloc,
-            f16,
-            len,
+            len * @sizeOf(f16),
             .initMany(&.{ .Storage, .CopyDst, .CopySrc }),
         ),
         .len = len,
@@ -59,41 +58,8 @@ pub fn run(self: Vec, gloc: GpuAllocator, other: Vec, pip: GpuPipeline) !Vec {
 }
 
 // Changed: gloc is passed by value instead of *GpuAllocator
-pub fn read(self: Vec, gloc: GpuAllocator, alloc: std.mem.Allocator) ![]f16 {
-    const out = try alloc.alloc(f16, self.len);
-    const bytes = self.byteSize();
-
-    const staging = try GpuBuffer.init(
-        gloc,
-        f16,
-        self.len,
-        .initMany(&.{ .MapRead, .CopyDst }),
-    );
-    defer staging.deinit();
-
-    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse return error.Encoder;
-    c.wgpuCommandEncoderCopyBufferToBuffer(enc, self.buf.raw, 0, staging.raw, 0, bytes);
-    const cmd = c.wgpuCommandEncoderFinish(enc, null);
-    defer c.wgpuCommandEncoderRelease(enc);
-    defer c.wgpuCommandBufferRelease(cmd);
-    c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
-
-    var mapped = false;
-    staging.mapAsync(
-        c.WGPUMapMode_Read,
-        0,
-        bytes,
-        .{ .callback = onMapped, .userdata1 = &mapped },
-    );
-    while (!mapped) gloc.device.poll();
-
-    const ptr: [*]const f16 = @ptrCast(@alignCast(
-        staging.getConstMappedRange(0, bytes),
-    ));
-    @memcpy(out[0..self.len], ptr[0..self.len]);
-    staging.unmap();
-
-    return out;
+pub fn read(self: Vec, alloc: std.mem.Allocator) ![]f16 {
+    return self.buf.read(alloc, f16);
 }
 
 fn onMapped(
@@ -124,8 +90,7 @@ fn dispatch2in1out(
 
         const info_buf = try GpuBuffer.init(
             gloc,
-            u32,
-            1,
+            @sizeOf(u32),
             .initMany(&.{ .Uniform, .CopyDst }),
         );
         defer info_buf.deinit();

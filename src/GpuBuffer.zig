@@ -22,22 +22,16 @@ const BufferUsage = enum(u64) {
 };
 
 /// Allocates the underlying WebGPU handle and registers it to the parent GpuAllocator
-pub fn init(gloc: GpuAllocator, T: type, len: usize, usage: std.EnumSet(BufferUsage)) !@This() {
-    switch (@typeInfo(T)) {
-        .int, .float => {},
-        else => @compileError("GpuBuffer can only use int and float type"),
-    }
-
+pub fn init(gloc: GpuAllocator, size: u64, usage: std.EnumSet(BufferUsage)) !@This() {
     var use: u64 = 0;
     var iter = usage.iterator();
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
-    const bytes = @sizeOf(T) * len;
-    const raw_handle = try gloc.allocBuffer(bytes, use);
+    const raw_handle = try gloc.allocBuffer(size, use);
 
     return .{
         .raw = raw_handle,
-        .size = bytes,
+        .size = size,
         .usage = use,
         .gloc = gloc,
     };
@@ -46,6 +40,11 @@ pub fn init(gloc: GpuAllocator, T: type, len: usize, usage: std.EnumSet(BufferUs
 /// Unregisters from the parent GpuAllocator and cleanly destroys GPU resources
 pub fn deinit(self: @This()) void {
     self.gloc.freeBuffer(self.raw, self.size);
+}
+
+/// Native getConstMappedRange wrapper
+pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopaque {
+    return c.wgpuBufferGetConstMappedRange(self.raw, offset, size);
 }
 
 /// Native mapAsync wrapper
@@ -59,11 +58,6 @@ pub fn mapAsync(
     _ = c.wgpuBufferMapAsync(self.raw, mode, offset, size, callback_info);
 }
 
-/// Native getConstMappedRange wrapper
-pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopaque {
-    return c.wgpuBufferGetConstMappedRange(self.raw, offset, size);
-}
-
 /// Native unmap wrapper
 pub fn unmap(self: @This()) void {
     c.wgpuBufferUnmap(self.raw);
@@ -75,4 +69,49 @@ pub fn load(
     data: []const f16,
 ) !void {
     c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.size);
+}
+
+pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]f16 {
+    const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
+
+    const staging = try init(
+        self.gloc,
+        self.size,
+        .initMany(&.{ .MapRead, .CopyDst }),
+    );
+    defer staging.deinit();
+
+    const enc = c.wgpuDeviceCreateCommandEncoder(self.gloc.device.device, null) orelse return error.Encoder;
+    c.wgpuCommandEncoderCopyBufferToBuffer(enc, self.raw, 0, staging.raw, 0, self.size);
+    const cmd = c.wgpuCommandEncoderFinish(enc, null);
+    defer c.wgpuCommandEncoderRelease(enc);
+    defer c.wgpuCommandBufferRelease(cmd);
+    c.wgpuQueueSubmit(self.gloc.device.queue, 1, &cmd);
+
+    var mapped = false;
+    staging.mapAsync(
+        c.WGPUMapMode_Read,
+        0,
+        self.size,
+        .{ .callback = onMapped, .userdata1 = &mapped },
+    );
+    while (!mapped) self.gloc.device.poll();
+
+    const ptr: [*]const T = @ptrCast(@alignCast(
+        staging.getConstMappedRange(0, self.size),
+    ));
+    @memcpy(out[0..out.len], ptr[0..out.len]);
+    staging.unmap();
+
+    return out;
+}
+
+fn onMapped(
+    status: c.WGPUMapAsyncStatus,
+    _: c.WGPUStringView,
+    userdata1: ?*anyopaque,
+    _: ?*anyopaque,
+) callconv(.c) void {
+    const flag: *bool = @ptrCast(@alignCast(userdata1.?));
+    flag.* = (status == c.WGPUMapAsyncStatus_Success);
 }
