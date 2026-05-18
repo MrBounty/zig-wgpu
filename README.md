@@ -16,11 +16,13 @@ The library exports five primary components:
 Below is a complete, self-contained example demonstrating how to initialize the GPU, load data, run a compute shader, and read the results back to the CPU:
 
 ```zig
+
 const std = @import("std");
-const GpuDevice = @import("GpuDevice.zig");
-const GpuArena = @import("GpuArena.zig");
-const GpuBuffer = @import("GpuBuffer.zig");
-const GpuProcess = @import("GpuProcess.zig");
+const gpu = @import("gpu");
+const GpuDevice = gpu.GpuDevice;
+const GpuArena = gpu.GpuArena;
+const GpuBuffer = gpu.GpuBuffer;
+const GpuProcess = gpu.GpuProcess;
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;

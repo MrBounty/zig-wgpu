@@ -93,6 +93,7 @@ pub fn deinit(self: @This()) void {
     c.wgpuInstanceRelease(self.instance);
 }
 
+/// Wait for thing to be done
 pub fn poll(self: @This()) void {
     _ = c.wgpuDevicePoll(self.device, 1, null);
 }

@@ -1,11 +1,10 @@
 const std = @import("std");
-const GpuDevice = @import("GpuDevice.zig");
-const GpuArena = @import("GpuArena.zig");
-const GpuAllocator = @import("GpuAllocator.zig");
-const GpuBuffer = @import("GpuBuffer.zig");
-const GpuProcess = @import("GpuProcess.zig");
-
-const c = @import("utils.zig").c;
+const gpu = @import("gpu");
+const GpuDevice = gpu.GpuDevice;
+const GpuArena = gpu.GpuArena;
+const GpuAllocator = gpu.GpuAllocator;
+const GpuBuffer = gpu.GpuBuffer;
+const GpuProcess = gpu.GpuProcess;
 
 /// Minimal implementation of a f16 Vector
 const Vec = struct {
@@ -80,9 +79,9 @@ pub fn main(init: std.process.Init) !void {
         4 * 4 * 4 * 1024,
         4 * 4 * 4 * 4 * 1024,
         1024 * 1024,
-        // 4 * 1024 * 1024,
-        // 4 * 4 * 1024 * 1024,
-        // 4 * 4 * 4 * 1024 * 1024,
+        4 * 1024 * 1024,
+        4 * 4 * 1024 * 1024,
+        4 * 4 * 4 * 1024 * 1024,
         // 4 * 4 * 4 * 4 * 1024 * 1024,
         // 4 * 4 * 4 * 4 * 4 * 1024 * 1024,
     };
@@ -137,7 +136,7 @@ pub fn main(init: std.process.Init) !void {
             if (grena.allocated_vram_bytes > peak_vram_bytes)
                 peak_vram_bytes = grena.allocated_vram_bytes;
 
-            _ = c.wgpuDevicePoll(device.device, 1, null);
+            device.poll();
 
             const compute_duration = compute_start.durationTo(std.Io.Clock.awake.now(init.io));
             const compute_ns = @as(u64, @intCast(compute_duration.toNanoseconds()));
