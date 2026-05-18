@@ -1,5 +1,4 @@
 const std = @import("std");
-const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
 const GpuDevice = @import("GpuDevice.zig");
@@ -56,14 +55,4 @@ pub fn run(self: Vec, gloc: GpuAllocator, other: Vec, process: GpuProcess) !Vec 
 // Changed: gloc is passed by value instead of *GpuAllocator
 pub fn read(self: Vec, alloc: std.mem.Allocator) ![]f16 {
     return self.buf.read(alloc, f16);
-}
-
-fn onMapped(
-    status: c.WGPUMapAsyncStatus,
-    _: c.WGPUStringView,
-    userdata1: ?*anyopaque,
-    _: ?*anyopaque,
-) callconv(.c) void {
-    const flag: *bool = @ptrCast(@alignCast(userdata1.?));
-    flag.* = (status == c.WGPUMapAsyncStatus_Success);
 }
