@@ -1,19 +1,76 @@
 const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
+const GpuArena = @import("GpuArena.zig");
 const GpuAllocator = @import("GpuAllocator.zig");
-const GpuPipeline = @import("GpuPipeline.zig");
-const Vec = @import("Vec.zig");
+const GpuBuffer = @import("GpuBuffer.zig");
+const GpuProcess = @import("GpuProcess.zig");
 
 const c = @import("utils.zig").c;
+
+/// Minimal implementation of a f16 Vector
+const Vec = struct {
+    buf: GpuBuffer,
+    len: usize,
+
+    // Changed: gloc is passed by value (const)
+    pub fn initZero(gloc: GpuAllocator, len: usize) !Vec {
+        return .{
+            .buf = try GpuBuffer.init(
+                gloc,
+                len * @sizeOf(f16),
+                .initMany(&.{ .Storage, .CopyDst, .CopySrc }),
+            ),
+            .len = len,
+        };
+    }
+
+    // Changed: gloc is passed by value
+    pub fn initLoad(gloc: GpuAllocator, data: []const f16) !Vec {
+        var self = try initZero(gloc, data.len);
+        try self.load(data); // Direct access via the interface copy
+        return self;
+    }
+
+    pub fn deinit(self: Vec) void {
+        self.buf.deinit();
+    }
+
+    /// CPU to GPU.
+    pub fn load(self: Vec, data: []const f16) !void {
+        try self.buf.load(f16, data);
+    }
+
+    pub fn byteSize(self: Vec) u64 {
+        return @as(u64, self.len) * @sizeOf(f16);
+    }
+
+    // Changed: gloc is passed by value instead of *GpuAllocator
+    pub fn run(self: Vec, gloc: GpuAllocator, other: Vec, process: GpuProcess) !Vec {
+        std.debug.assert(self.len == other.len);
+
+        const result = try Vec.initZero(gloc, self.len);
+        errdefer result.deinit();
+
+        try process.run(gloc, f16, self.buf, other.buf, result.buf);
+        return result;
+    }
+
+    // Changed: gloc is passed by value instead of *GpuAllocator
+    pub fn read(self: Vec, alloc: std.mem.Allocator) ![]f16 {
+        return self.buf.read(alloc, f16);
+    }
+};
 
 pub fn main(init: std.process.Init) !void {
     const device = try GpuDevice.init(.{ .vram_bytes_limit = 4 * 1024 * 1024 * 1024 });
     defer device.deinit();
 
-    var gloc = try GpuAllocator.init(init.gpa, device);
-    defer gloc.deinit();
+    var grena = GpuArena.init(init.gpa, device);
+    defer grena.deinit();
 
-    const add_pip = try GpuPipeline.init(device, @embedFile("shaders/add.wgsl"));
+    const gloc = grena.gpuAllocator();
+
+    const add_pip = try GpuProcess.init(device, @embedFile("shaders/add.wgsl"));
     defer add_pip.deinit();
 
     const allocator = init.gpa;
@@ -22,13 +79,13 @@ pub fn main(init: std.process.Init) !void {
     {
         var warmup_a = [_]f16{1.0};
         var warmup_b = [_]f16{1.0};
-        const wa = try Vec.initLoad(&gloc, &warmup_a);
+        const wa = try Vec.initLoad(gloc, &warmup_a);
         defer wa.deinit();
-        const wb = try Vec.initLoad(&gloc, &warmup_b);
+        const wb = try Vec.initLoad(gloc, &warmup_b);
         defer wb.deinit();
-        const wsum = try wa.run(&gloc, wb, add_pip);
+        const wsum = try wa.run(gloc, wb, add_pip);
         defer wsum.deinit();
-        const wout = try wsum.read(&gloc, allocator);
+        const wout = try wsum.read(allocator);
         defer allocator.free(wout);
     }
 
@@ -78,9 +135,9 @@ pub fn main(init: std.process.Init) !void {
             // --- 1. GPU ALLOCATION PHASE ---
             const alloc_start = std.Io.Clock.awake.now(init.io);
 
-            const a = try Vec.initLoad(&gloc, data_a);
+            const a = try Vec.initLoad(gloc, data_a);
             defer a.deinit();
-            const b = try Vec.initLoad(&gloc, data_b);
+            const b = try Vec.initLoad(gloc, data_b);
             defer b.deinit();
 
             const alloc_duration = alloc_start.durationTo(std.Io.Clock.awake.now(init.io));
@@ -90,13 +147,13 @@ pub fn main(init: std.process.Init) !void {
             // --- 2. COMPUTE PHASE ---
             const compute_start = std.Io.Clock.awake.now(init.io);
 
-            const sum = try a.run(&gloc, b, add_pip);
+            const sum = try a.run(gloc, b, add_pip);
             defer sum.deinit();
 
             // All 3 buffers (a, b, sum) are currently resident in VRAM here.
             // Querying now catches the true peak allocation step.
-            if (gloc.allocated_vram_bytes > peak_vram_bytes)
-                peak_vram_bytes = gloc.allocated_vram_bytes;
+            if (grena.allocated_vram_bytes > peak_vram_bytes)
+                peak_vram_bytes = grena.allocated_vram_bytes;
 
             _ = c.wgpuDevicePoll(device.device, 1, null);
 
@@ -107,7 +164,7 @@ pub fn main(init: std.process.Init) !void {
             // --- 3. TRANSFER PHASE (Device -> Host) ---
             const transfer_start = std.Io.Clock.awake.now(init.io);
 
-            const out = try sum.read(&gloc, allocator);
+            const out = try sum.read(allocator);
             defer allocator.free(out);
 
             const transfer_duration = transfer_start.durationTo(std.Io.Clock.awake.now(init.io));
