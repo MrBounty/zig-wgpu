@@ -18,9 +18,9 @@ pub fn main(init: std.process.Init) !void {
     const add_pip = try GpuPipeline.init(device, @embedFile("shaders/add.wgsl"));
     defer add_pip.deinit();
 
-    const data_a = try allocator.alloc(f32, 1024);
+    const data_a = try allocator.alloc(f16, 1024);
     defer allocator.free(data_a);
-    const data_b = try allocator.alloc(f32, 1024);
+    const data_b = try allocator.alloc(f16, 1024);
     defer allocator.free(data_b);
 
     for (0..1024) |i| {

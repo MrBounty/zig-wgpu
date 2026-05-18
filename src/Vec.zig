@@ -15,7 +15,7 @@ pub fn initZero(gloc: *GpuAllocator, len: usize) !Vec {
     return .{
         .buf = try GpuBuffer.init(
             gloc,
-            f32,
+            f16,
             len,
             c.WGPUBufferUsage_Storage | c.WGPUBufferUsage_CopyDst | c.WGPUBufferUsage_CopySrc,
         ),
@@ -23,7 +23,7 @@ pub fn initZero(gloc: *GpuAllocator, len: usize) !Vec {
     };
 }
 
-pub fn initLoad(gloc: *GpuAllocator, data: []const f32) !Vec {
+pub fn initLoad(gloc: *GpuAllocator, data: []const f16) !Vec {
     var self = try initZero(gloc, data.len);
     try self.load(gloc.device, data);
     return self;
@@ -37,15 +37,15 @@ pub fn deinit(self: Vec) void {
 pub fn load(
     self: Vec,
     device: GpuDevice,
-    data: []const f32,
+    data: []const f16,
 ) !void {
     std.debug.assert(data.len == self.len);
-    const bytes = data.len * @sizeOf(f32);
+    const bytes = self.byteSize();
     c.wgpuQueueWriteBuffer(device.queue, self.buf.raw, 0, data.ptr, bytes);
 }
 
 pub fn byteSize(self: Vec) u64 {
-    return @as(u64, self.len) * @sizeOf(f32);
+    return @as(u64, self.len) * @sizeOf(f16);
 }
 
 pub fn run(self: Vec, gloc: *GpuAllocator, other: Vec, pip: GpuPipeline) !Vec {
@@ -60,13 +60,13 @@ pub fn run(self: Vec, gloc: *GpuAllocator, other: Vec, pip: GpuPipeline) !Vec {
 }
 
 /// GPU to CPU.
-pub fn read(self: Vec, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
-    const out = try alloc.alloc(f32, self.len);
+pub fn read(self: Vec, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f16 {
+    const out = try alloc.alloc(f16, self.len);
     const bytes = self.byteSize();
 
     const staging = try GpuBuffer.init(
         gloc,
-        f32,
+        f16,
         self.len,
         c.WGPUBufferUsage_MapRead | c.WGPUBufferUsage_CopyDst,
     );
@@ -88,7 +88,7 @@ pub fn read(self: Vec, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
     );
     while (!mapped) gloc.device.poll();
 
-    const ptr: [*]const f32 = @ptrCast(@alignCast(
+    const ptr: [*]const f16 = @ptrCast(@alignCast(
         staging.getConstMappedRange(0, bytes),
     ));
     @memcpy(out[0..self.len], ptr[0..self.len]);
@@ -122,7 +122,7 @@ fn dispatch2in1out(
     while (offset < bytes) {
         // Calculate bounds for the current chunk
         const current_chunk_bytes = @min(max_chunk_bytes, bytes - offset);
-        const current_chunk_elements: u32 = @intCast(current_chunk_bytes / @sizeOf(f32));
+        const current_chunk_elements: u32 = @intCast(current_chunk_bytes / @sizeOf(f16));
 
         // Create uniform buffer for this specific chunk's size
         const info_buf = try GpuBuffer.init(

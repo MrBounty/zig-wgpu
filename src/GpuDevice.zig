@@ -36,21 +36,32 @@ pub fn init(config: GpuDeviceConfig) !@This() {
     const adapter = ctx.adapter orelse return error.NoAdapter;
     errdefer c.wgpuAdapterRelease(adapter);
 
-    // --- QUERY HARDWARE LIMITS ---
+    var supported_features = std.mem.zeroes(c.WGPUSupportedFeatures);
+    c.wgpuAdapterGetFeatures(adapter, &supported_features);
+
     var supported_limits = std.mem.zeroes(c.WGPULimits);
     supported_limits.nextInChain = null;
-
-    // Fetch what your physical graphic card can actually handle
     if (c.wgpuAdapterGetLimits(adapter, &supported_limits) != 1) return error.FailedToGetAdapterLimits;
+
+    var has_f16 = false;
+    for (0..supported_features.featureCount) |i| {
+        if (supported_features.features[i] == c.WGPUFeatureName_ShaderF16) {
+            has_f16 = true;
+            break;
+        }
+    }
+
+    var feature_buf = [_]c.WGPUFeatureName{c.WGPUFeatureName_ShaderF16};
+    const required_features: []const c.WGPUFeatureName =
+        if (has_f16) feature_buf[0..1] else &.{};
 
     const device_descriptor = c.WGPUDeviceDescriptor{
         .nextInChain = null,
         .label = sv("TensorCompilerDevice"),
-        .requiredFeatureCount = 0,
-        .requiredFeatures = null,
+        .requiredFeatureCount = required_features.len,
+        .requiredFeatures = if (required_features.len > 0) required_features.ptr else null,
         .requiredLimits = &supported_limits,
     };
-
     _ = c.wgpuAdapterRequestDevice(
         adapter,
         &device_descriptor,

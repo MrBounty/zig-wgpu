@@ -20,8 +20,8 @@ pub fn main(init: std.process.Init) !void {
 
     // --- WARM-UP PHASE ---
     {
-        var warmup_a = [_]f32{1.0};
-        var warmup_b = [_]f32{1.0};
+        var warmup_a = [_]f16{1.0};
+        var warmup_b = [_]f16{1.0};
         const wa = try Vec.initLoad(&gloc, &warmup_a);
         defer wa.deinit();
         const wb = try Vec.initLoad(&gloc, &warmup_b);
@@ -56,9 +56,9 @@ pub fn main(init: std.process.Init) !void {
 
     for (sizes) |size| {
         // --- Phase 1: Host Init/Alloc (Outside the iteration loop for pure host prep) ---
-        const data_a = try allocator.alloc(f32, size);
+        const data_a = try allocator.alloc(f16, size);
         defer allocator.free(data_a);
-        const data_b = try allocator.alloc(f32, size);
+        const data_b = try allocator.alloc(f16, size);
         defer allocator.free(data_b);
 
         for (0..size) |i| {
@@ -117,7 +117,7 @@ pub fn main(init: std.process.Init) !void {
 
         // --- Metrics Calculations ---
         const f_size = @as(f64, @floatFromInt(size));
-        const element_bytes = f_size * @as(f64, @floatFromInt(@sizeOf(f32)));
+        const element_bytes = f_size * @as(f64, @floatFromInt(@sizeOf(f16)));
         const mb = element_bytes / (1024.0 * 1024.0);
 
         // Individual Phase Timings (ms)
