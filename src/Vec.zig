@@ -15,7 +15,8 @@ pub fn initZero(gloc: *GpuAllocator, len: usize) !Vec {
     return .{
         .buf = try GpuBuffer.init(
             gloc,
-            len * @sizeOf(f32),
+            f32,
+            len,
             c.WGPUBufferUsage_Storage | c.WGPUBufferUsage_CopyDst | c.WGPUBufferUsage_CopySrc,
         ),
         .len = len,
@@ -65,7 +66,8 @@ pub fn read(self: Vec, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f32 {
 
     const staging = try GpuBuffer.init(
         gloc,
-        bytes,
+        f32,
+        self.len,
         c.WGPUBufferUsage_MapRead | c.WGPUBufferUsage_CopyDst,
     );
     defer staging.deinit();
@@ -125,7 +127,8 @@ fn dispatch2in1out(
         // Create uniform buffer for this specific chunk's size
         const info_buf = try GpuBuffer.init(
             gloc,
-            @sizeOf(u32),
+            u32,
+            1,
             c.WGPUBufferUsage_Uniform | c.WGPUBufferUsage_CopyDst,
         );
         defer info_buf.deinit();

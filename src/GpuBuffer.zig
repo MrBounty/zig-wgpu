@@ -8,7 +8,12 @@ usage: c.WGPUBufferUsage,
 gloc: *GpuAllocator,
 
 /// Allocates the underlying WebGPU handle and registers it to the parent GpuAllocator
-pub fn init(gloc: *GpuAllocator, bytes: u64, usage: c.WGPUBufferUsage) !@This() {
+pub fn init(gloc: *GpuAllocator, T: type, len: usize, usage: c.WGPUBufferUsage) !@This() {
+    switch (@typeInfo(T)) {
+        .int, .float => {},
+        else => @compileError("GpuBuffer can only use int and float type"),
+    }
+    const bytes = @sizeOf(T) * len;
     const raw_handle = try gloc.registerBuffer(bytes, usage);
     return .{
         .raw = raw_handle,
