@@ -66,12 +66,13 @@ pub fn unmap(self: @This()) void {
 /// CPU to GPU.
 pub fn load(
     self: @This(),
-    data: []const f16,
+    T: type,
+    data: []const T,
 ) !void {
     c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.size);
 }
 
-pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]f16 {
+pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
 
     const staging = try init(

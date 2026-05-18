@@ -1,3 +1,6 @@
+/// GpuProcess is just a pipeline with 2 inpout and 1 output
+/// for now, to see if I make it a bit more generic
+///
 const std = @import("std");
 const c = @import("utils.zig").c;
 const sv = @import("utils.zig").sv;
@@ -40,6 +43,7 @@ fn onMapped(
 pub fn run(
     self: @This(),
     gloc: GpuAllocator,
+    T: type,
     buf_a: GpuBuffer,
     buf_b: GpuBuffer,
     buf_out: GpuBuffer,
@@ -50,7 +54,7 @@ pub fn run(
     var offset: u64 = 0;
     while (offset < bytes) {
         const current_chunk_bytes = @min(max_chunk_bytes, bytes - offset);
-        const current_chunk_elements: u32 = @intCast(current_chunk_bytes / @sizeOf(f16));
+        const current_chunk_elements: u32 = @intCast(current_chunk_bytes / @sizeOf(T));
 
         const info_buf = try GpuBuffer.init(
             gloc,

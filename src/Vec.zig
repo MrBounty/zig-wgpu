@@ -34,7 +34,7 @@ pub fn deinit(self: Vec) void {
 
 /// CPU to GPU.
 pub fn load(self: Vec, data: []const f16) !void {
-    try self.buf.load(data);
+    try self.buf.load(f16, data);
 }
 
 pub fn byteSize(self: Vec) u64 {
@@ -48,7 +48,7 @@ pub fn run(self: Vec, gloc: GpuAllocator, other: Vec, process: GpuProcess) !Vec 
     const result = try Vec.initZero(gloc, self.len);
     errdefer result.deinit();
 
-    try process.run(gloc, self.buf, other.buf, result.buf);
+    try process.run(gloc, f32, self.buf, other.buf, result.buf);
     return result;
 }
 
