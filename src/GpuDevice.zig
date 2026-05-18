@@ -10,6 +10,12 @@ const Ctx = struct {
 const GpuDeviceConfig = struct {
     /// VRAM limit. Default 2 GB
     vram_bytes_limit: u64 = 2 * 1024 * 1024 * 1024,
+    power_preference: enum(c_uint) {
+        Undefined = 0x00000000,
+        LowPower = 0x00000001,
+        HighPerformance = 0x00000002,
+        Force32 = 0x7FFFFFFF,
+    } = .HighPerformance,
 };
 
 instance: c.WGPUInstance,
@@ -29,7 +35,7 @@ pub fn init(config: GpuDeviceConfig) !@This() {
     var ctx = Ctx{};
     _ = c.wgpuInstanceRequestAdapter(
         instance,
-        &.{ .powerPreference = c.WGPUPowerPreference_HighPerformance },
+        &.{ .powerPreference = @intFromEnum(config.power_preference) },
         .{ .callback = onAdapter, .userdata1 = &ctx },
     );
     c.wgpuInstanceProcessEvents(instance);
