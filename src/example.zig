@@ -37,7 +37,9 @@ pub fn main(init: std.process.Init) !void {
     defer b.deinit();
 
     const sum = try a.run(gloc, b, add_pip);
-    defer sum.deinit();
+    // Don't need `sum.deinit()` because grena will deallocate everything when deinit
+
+    std.debug.print("Bytes used: {d} (3 * {d})\n", .{ grena.allocated_vram_bytes, a.byteSize() });
 
     const out = try sum.read(gloc, allocator);
     defer allocator.free(out);
