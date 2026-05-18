@@ -1,6 +1,7 @@
 # Minimal Zig WebGPU Compute Library
 
-This is a minimal, self-contained Zig library designed to simplify running compute shaders using WebGPU. It abstracts away much of the boilerplate required for GPU device initialization, memory management, and pipeline execution.
+This is a minimal, self-contained Zig library designed to simplify running compute shaders using WebGPU.
+It abstracts away much of the boilerplate required for GPU device initialization, memory management, and pipeline execution.
 
 ## Core Modules
 

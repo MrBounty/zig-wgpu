@@ -27,7 +27,17 @@ pub fn main(init: std.process.Init) !void {
     const add_process = try GpuProcess.init(device, @embedFile("shaders/add.wgsl"));
     defer add_process.deinit();
 
-    for (EPOCH) |epoch| {}
+    var train_dir = try std.Io.Dir.cwd().openDir(io, "mnist/train", .{});
+
+    var images: [BATCHSIZE * 28 * 28]f16 = undefined;
+    for (EPOCH) |epoch| {
+        // Load random images from train dir
+        train_dir.openDir(io, "0", .{});
+        for (BATCHSIZE) |i| {
+            const file = try train_dir.openFile(io, "0.jpg", .{});
+            images[28 * 28 * i .. 28 * 28 * (i + 1)] = file.read
+        }
+    }
 
     // 4. Setup CPU data
     const len: usize = 16;
