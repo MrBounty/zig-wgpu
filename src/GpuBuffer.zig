@@ -7,18 +7,38 @@ size: u64,
 usage: c.WGPUBufferUsage,
 gloc: *GpuAllocator,
 
+const BufferUsage = enum(u64) {
+    None = 0x0000000000000000,
+    MapRead = 0x0000000000000001,
+    MapWrite = 0x0000000000000002,
+    CopySrc = 0x0000000000000004,
+    CopyDst = 0x0000000000000008,
+    Index = 0x0000000000000010,
+    Vertex = 0x0000000000000020,
+    Uniform = 0x0000000000000040,
+    Storage = 0x0000000000000080,
+    Indirect = 0x0000000000000100,
+    QueryResolve = 0x0000000000000200,
+};
+
 /// Allocates the underlying WebGPU handle and registers it to the parent GpuAllocator
-pub fn init(gloc: *GpuAllocator, T: type, len: usize, usage: c.WGPUBufferUsage) !@This() {
+pub fn init(gloc: *GpuAllocator, T: type, len: usize, usage: std.EnumSet(BufferUsage)) !@This() {
     switch (@typeInfo(T)) {
         .int, .float => {},
         else => @compileError("GpuBuffer can only use int and float type"),
     }
+
+    var use: u64 = 0;
+    var iter = usage.iterator();
+    while (iter.next()) |flag| use |= @intFromEnum(flag);
+
     const bytes = @sizeOf(T) * len;
-    const raw_handle = try gloc.registerBuffer(bytes, usage);
+    const raw_handle = try gloc.registerBuffer(bytes, use);
+
     return .{
         .raw = raw_handle,
         .size = bytes,
-        .usage = usage,
+        .usage = use,
         .gloc = gloc,
     };
 }

@@ -17,7 +17,7 @@ pub fn initZero(gloc: *GpuAllocator, len: usize) !Vec {
             gloc,
             f16,
             len,
-            c.WGPUBufferUsage_Storage | c.WGPUBufferUsage_CopyDst | c.WGPUBufferUsage_CopySrc,
+            .initMany(&.{ .Storage, .CopyDst, .CopySrc }),
         ),
         .len = len,
     };
@@ -68,7 +68,7 @@ pub fn read(self: Vec, gloc: *GpuAllocator, alloc: std.mem.Allocator) ![]f16 {
         gloc,
         f16,
         self.len,
-        c.WGPUBufferUsage_MapRead | c.WGPUBufferUsage_CopyDst,
+        .initMany(&.{ .MapRead, .CopyDst }),
     );
     defer staging.deinit();
 
@@ -129,7 +129,7 @@ fn dispatch2in1out(
             gloc,
             u32,
             1,
-            c.WGPUBufferUsage_Uniform | c.WGPUBufferUsage_CopyDst,
+            .initMany(&.{ .Uniform, .CopyDst }),
         );
         defer info_buf.deinit();
 
