@@ -3,7 +3,7 @@ const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 
 raw: c.WGPUBuffer,
-size: u64,
+size: u64, // Now tracks the 4-byte aligned size directly
 usage: c.WGPUBufferUsage,
 gloc: GpuAllocator,
 
@@ -27,11 +27,13 @@ pub fn init(gloc: GpuAllocator, size: u64, usage: std.EnumSet(BufferUsage)) !@Th
     var iter = usage.iterator();
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
-    const raw_handle = try gloc.allocBuffer(size, use);
+    // Automatically align the buffer size forward to a multiple of 4 bytes under the hood
+    const aligned_size = std.mem.alignForward(u64, size, 4);
 
+    const raw_handle = try gloc.allocBuffer(aligned_size, use);
     return .{
         .raw = raw_handle,
-        .size = size,
+        .size = aligned_size, // Expose the aligned size to the rest of the application
         .usage = use,
         .gloc = gloc,
     };
@@ -69,7 +71,25 @@ pub fn load(
     T: type,
     data: []const T,
 ) !void {
-    c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.size);
+    const bytes = data.len * @sizeOf(T);
+
+    if (bytes == self.size) {
+        // Aligned path: direct download
+        c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.size);
+    } else {
+        // Unaligned path: Split the write into an aligned chunk and a padded remainder
+        // to support arbitrary lengths without any allocations or large stack arrays.
+        const aligned_part = (bytes / 4) * 4;
+        if (aligned_part > 0) {
+            c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, aligned_part);
+        }
+
+        var remainder_buf: [4]u8 = .{ 0, 0, 0, 0 };
+        const data_bytes = std.mem.sliceAsBytes(data);
+        @memcpy(remainder_buf[0 .. bytes - aligned_part], data_bytes[aligned_part..bytes]);
+
+        c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, aligned_part, &remainder_buf, 4);
+    }
 }
 
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {

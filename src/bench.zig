@@ -40,10 +40,6 @@ const Vec = struct {
         try self.buf.load(f16, data);
     }
 
-    pub fn byteSize(self: Vec) u64 {
-        return @as(u64, self.len) * @sizeOf(f16);
-    }
-
     // Changed: gloc is passed by value instead of *GpuAllocator
     pub fn run(self: Vec, gloc: GpuAllocator, other: Vec, process: GpuProcess) !Vec {
         std.debug.assert(self.len == other.len);
@@ -74,20 +70,6 @@ pub fn main(init: std.process.Init) !void {
     defer add_pip.deinit();
 
     const allocator = init.gpa;
-
-    // --- WARM-UP PHASE ---
-    {
-        var warmup_a = [_]f16{1.0};
-        var warmup_b = [_]f16{1.0};
-        const wa = try Vec.initLoad(gloc, &warmup_a);
-        defer wa.deinit();
-        const wb = try Vec.initLoad(gloc, &warmup_b);
-        defer wb.deinit();
-        const wsum = try wa.run(gloc, wb, add_pip);
-        defer wsum.deinit();
-        const wout = try wsum.read(allocator);
-        defer allocator.free(wout);
-    }
 
     const sizes = [_]usize{
         1,
