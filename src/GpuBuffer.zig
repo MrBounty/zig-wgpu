@@ -3,7 +3,7 @@ const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 
 raw: c.WGPUBuffer,
-size: u64, // Now tracks the 4-byte aligned size directly
+size: u64,
 usage: c.WGPUBufferUsage,
 gloc: GpuAllocator,
 
@@ -33,7 +33,7 @@ pub fn init(gloc: GpuAllocator, size: u64, usage: std.EnumSet(BufferUsage)) !@Th
     const raw_handle = try gloc.allocBuffer(aligned_size, use);
     return .{
         .raw = raw_handle,
-        .size = aligned_size, // Expose the aligned size to the rest of the application
+        .size = aligned_size,
         .usage = use,
         .gloc = gloc,
     };

@@ -1,23 +1,20 @@
-// GpuArena.zig
 const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
 const GpuAllocator = @import("GpuAllocator.zig");
 const c = @import("utils.zig").c;
 
-const GpuArena = @This();
-
 device: GpuDevice,
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, void),
 allocated_vram_bytes: u64 = 0,
 
-pub fn init(cpu_allocator: std.mem.Allocator, device: GpuDevice) GpuArena {
+pub fn init(cpu_allocator: std.mem.Allocator, device: GpuDevice) @This() {
     return .{
         .device = device,
         .tracked_buffers = .init(cpu_allocator),
     };
 }
 
-pub fn deinit(self: *GpuArena) void {
+pub fn deinit(self: *@This()) void {
     var it = self.tracked_buffers.keyIterator();
     while (it.next()) |buf_ptr| {
         c.wgpuBufferDestroy(buf_ptr.*);
@@ -27,7 +24,7 @@ pub fn deinit(self: *GpuArena) void {
 }
 
 /// Returns the type-erased immutable interface wrapper
-pub fn gpuAllocator(self: *GpuArena) GpuAllocator {
+pub fn gpuAllocator(self: *@This()) GpuAllocator {
     return .{
         .device = self.device,
         .ptr = self,
@@ -39,7 +36,7 @@ pub fn gpuAllocator(self: *GpuArena) GpuAllocator {
 }
 
 fn alloc(ctx: *anyopaque, bytes: u64, usage: c.WGPUBufferUsage) anyerror!c.WGPUBuffer {
-    const self: *GpuArena = @ptrCast(@alignCast(ctx));
+    const self: *@This() = @ptrCast(@alignCast(ctx));
 
     if (bytes > self.device.limits.maxBufferSize)
         return error.SingleBufferExceedsLimit;
@@ -62,7 +59,7 @@ fn alloc(ctx: *anyopaque, bytes: u64, usage: c.WGPUBufferUsage) anyerror!c.WGPUB
 }
 
 fn free(ctx: *anyopaque, buf_raw: c.WGPUBuffer, size: u64) void {
-    const self: *GpuArena = @ptrCast(@alignCast(ctx));
+    const self: *@This() = @ptrCast(@alignCast(ctx));
 
     if (self.tracked_buffers.remove(buf_raw)) {
         c.wgpuBufferDestroy(buf_raw);
