@@ -54,7 +54,6 @@ pub fn main(init: std.process.Init) !void {
     }
 
     // 5. Initialize raw GPU Buffers
-    // We pass the EnumSet inline using `.initMany` since the Enum itself isn't exported
     const byte_size = len * @sizeOf(f16);
     const buf_a = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
     const buf_b = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
