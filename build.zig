@@ -56,4 +56,39 @@ pub fn build(b: *std.Build) !void {
         const run_cmd = b.addRunArtifact(exe);
         run_step.dependOn(&run_cmd.step);
     }
+
+    const exe = b.addExecutable(.{
+        .name = "circle",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/circle.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{},
+        }),
+    });
+
+    exe.root_module.addIncludePath(b.path("libs/wgpu-native/include"));
+    exe.root_module.addLibraryPath(b.path("libs/wgpu-native/lib"));
+    exe.root_module.addObjectFile(b.path("libs/wgpu-native/lib/libwgpu_native.a"));
+
+    // Platform-specific system frameworks needed by wgpu-native
+    if (t.os.tag == .macos) {
+        exe.root_module.linkFramework("Metal", .{});
+        exe.root_module.linkFramework("QuartzCore", .{});
+        exe.root_module.linkFramework("Foundation", .{});
+        exe.root_module.linkFramework("CoreGraphics", .{});
+    } else if (t.os.tag == .windows) {
+        exe.root_module.linkSystemLibrary("d3d12", .{});
+        exe.root_module.linkSystemLibrary("dxgi", .{});
+        exe.root_module.linkSystemLibrary("user32", .{});
+    } else {
+        exe.root_module.linkSystemLibrary("vulkan", .{});
+        exe.root_module.linkSystemLibrary("gcc_s", .{});
+    }
+
+    b.installArtifact(exe);
+
+    const run_step = b.step("circle", "Run circle");
+    const run_cmd = b.addRunArtifact(exe);
+    run_step.dependOn(&run_cmd.step);
 }
