@@ -21,13 +21,11 @@ pub fn main(init: std.process.Init) !void {
     const add_process = try GpuProcess.init(
         device,
         @embedFile("shaders/add.wgsl"),
-        .{
-            .bindings = &.{
-                .{ .element_size = @sizeOf(f16) },
-                .{ .element_size = @sizeOf(f16) },
-                .{ .element_size = @sizeOf(f16) },
-            },
-        },
+        .{ .bindings = &.{
+            .{ .element_size = @sizeOf(f16) },
+            .{ .element_size = @sizeOf(f16) },
+            .{ .element_size = @sizeOf(f16) },
+        } },
     );
     defer add_process.deinit();
 
@@ -44,7 +42,6 @@ pub fn main(init: std.process.Init) !void {
     }
 
     // 5. Initialize raw GPU Buffers
-    // We pass the EnumSet inline using `.initMany` since the Enum itself isn't exported
     const byte_size = len * @sizeOf(f16);
     const buf_a = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
     const buf_b = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
@@ -58,7 +55,6 @@ pub fn main(init: std.process.Init) !void {
     try buf_b.load(f16, data_b);
 
     // 7. Dispatch the Compute Process
-    // We pass the data type (f16) to allow GpuProcess to calculate chunks correctly
     try add_process.run(gloc, .{ buf_a, buf_b, buf_out });
 
     // 8. Map and copy the resulting buffer back to the CPU

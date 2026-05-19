@@ -48,8 +48,7 @@ pub fn deinit(self: @This()) void {
 }
 
 /// Execute the compute pass with arbitrary buffer bindings via a tuple.
-/// `override_elements_count` can be `null` to infer the dispatch count from the first checked buffer.
-/// Example: `try proc.run(gloc, null, .{ buf_a, buf_b, buf_out });`
+/// Example: `try proc.run(gloc, .{ buf_a, buf_b, buf_out });`
 pub fn run(
     self: @This(),
     gloc: GpuAllocator,

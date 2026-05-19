@@ -17,7 +17,6 @@ The library exports five primary components:
 Below is a complete, self-contained example demonstrating how to initialize the GPU, load data, run a compute shader, and read the results back to the CPU:
 
 ```zig
-
 const std = @import("std");
 const gpu = @import("gpu");
 const GpuDevice = gpu.GpuDevice;
@@ -38,7 +37,15 @@ pub fn main(init: std.process.Init) !void {
     const gloc = grena.gpuAllocator();
 
     // 3. Load the WGSL compute pipeline
-    const add_process = try GpuProcess.init(device, @embedFile("shaders/add.wgsl"));
+    const add_process = try GpuProcess.init(
+        device,
+        @embedFile("shaders/add.wgsl"),
+        .{ .bindings = &.{
+            .{ .element_size = @sizeOf(f16) },
+            .{ .element_size = @sizeOf(f16) },
+            .{ .element_size = @sizeOf(f16) },
+        } },
+    );
     defer add_process.deinit();
 
     // 4. Setup CPU data
@@ -67,8 +74,7 @@ pub fn main(init: std.process.Init) !void {
     try buf_b.load(f16, data_b);
 
     // 7. Dispatch the Compute Process
-    // We pass the data type (f16) to allow GpuProcess to calculate chunks correctly
-    try add_process.run(gloc, f16, buf_a, buf_b, buf_out);
+    try add_process.run(gloc, .{ buf_a, buf_b, buf_out });
 
     // 8. Map and copy the resulting buffer back to the CPU
     const out = try buf_out.read(allocator, f16);
@@ -76,6 +82,7 @@ pub fn main(init: std.process.Init) !void {
 
     std.debug.print("Result: {any}\n", .{out});
 }
+
 ```
 
 ## Dependencies
