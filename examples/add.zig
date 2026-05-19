@@ -3,7 +3,7 @@ const gpu = @import("gpu");
 const GpuDevice = gpu.GpuDevice;
 const GpuArena = gpu.GpuArena;
 const GpuBuffer = gpu.GpuBuffer;
-const GpuProcess = gpu.GpuProcess;
+const GpuCompute = gpu.GpuCompute;
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
@@ -18,7 +18,7 @@ pub fn main(init: std.process.Init) !void {
     const gloc = grena.gpuAllocator();
 
     // 3. Load the WGSL compute pipeline
-    const add_process = try GpuProcess.init(
+    const add_cp = try GpuCompute.init(
         device,
         @embedFile("shaders/add.wgsl"),
         .{ .bindings = &.{
@@ -27,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
             .{ .element_size = @sizeOf(f16) },
         } },
     );
-    defer add_process.deinit();
+    defer add_cp.deinit();
 
     // 4. Setup CPU data
     const len: usize = 16;
@@ -55,7 +55,7 @@ pub fn main(init: std.process.Init) !void {
     try buf_b.load(f16, data_b);
 
     // 7. Dispatch the Compute Process
-    try add_process.run(gloc, .{ buf_a, buf_b, buf_out });
+    try add_cp.run(gloc, .{ buf_a, buf_b, buf_out });
 
     // 8. Map and copy the resulting buffer back to the CPU
     const out = try buf_out.read(allocator, f16);

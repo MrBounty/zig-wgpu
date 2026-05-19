@@ -4,7 +4,7 @@ const GpuDevice = gpu.GpuDevice;
 const GpuArena = gpu.GpuArena;
 const GpuAllocator = gpu.GpuAllocator;
 const GpuBuffer = gpu.GpuBuffer;
-const GpuProcess = gpu.GpuProcess;
+const GpuCompute = gpu.GpuCompute;
 
 /// Minimal implementation of a f16 Vector
 const Vec = struct {
@@ -40,13 +40,13 @@ const Vec = struct {
     }
 
     // Changed: gloc is passed by value instead of *GpuAllocator
-    pub fn run(self: Vec, gloc: GpuAllocator, other: Vec, process: GpuProcess) !Vec {
+    pub fn run(self: Vec, gloc: GpuAllocator, other: Vec, process: GpuCompute) !Vec {
         std.debug.assert(self.len == other.len);
 
         const result = try Vec.initZero(gloc, self.len);
         errdefer result.deinit();
 
-        try process.run(gloc, f16, self.buf, other.buf, result.buf);
+        try process.run(gloc, .{ self.buf, other.buf, result.buf });
         return result;
     }
 
@@ -65,7 +65,11 @@ pub fn main(init: std.process.Init) !void {
 
     const gloc = grena.gpuAllocator();
 
-    const add_pip = try GpuProcess.init(device, @embedFile("shaders/add.wgsl"));
+    const add_pip = try GpuCompute.init(device, @embedFile("shaders/add.wgsl"), .{ .bindings = &.{
+        .{ .element_size = @sizeOf(f16) },
+        .{ .element_size = @sizeOf(f16) },
+        .{ .element_size = @sizeOf(f16) },
+    } });
     defer add_pip.deinit();
 
     const allocator = init.gpa;

@@ -10,7 +10,7 @@ The library exports five primary components:
 * **`GpuDevice`**: Initializes the WebGPU instance, adapter, device, and queue. It is configured to prioritize high performance and automatically requests the `ShaderF16` feature if the adapter supports it. By default, it enforces a 2 GB VRAM limit.
 * **`GpuArena` / `GpuAllocator`**: A memory management layer that tracks allocated VRAM bytes to prevent exceeding the device budget. The arena automatically destroys and releases all tracked WebGPU buffers when deinitialized.
 * **`GpuBuffer`**: Wraps native WebGPU buffers. It automatically aligns buffer sizes forward to a multiple of 4 bytes. It provides a `.load()` method for CPU-to-GPU data transfers (handling both aligned and unaligned lengths smoothly) and a `.read()` method that utilizes a staging buffer to map GPU data back to the CPU.
-* **`GpuProcess`**: Compiles WGSL source code into a compute pipeline. When running a process, it automatically splits the work into manageable chunks (up to 1 GB at a time) and dispatches workgroups of size 256.
+* **`GpuCompute`**: Compiles WGSL source code into a compute pipeline. When running, it automatically splits the work into manageable chunks (up to 1 GB at a time) and dispatches workgroups of size 256.
 
 ## Quick Start Example
 
@@ -22,7 +22,7 @@ const gpu = @import("gpu");
 const GpuDevice = gpu.GpuDevice;
 const GpuArena = gpu.GpuArena;
 const GpuBuffer = gpu.GpuBuffer;
-const GpuProcess = gpu.GpuProcess;
+const GpuCompute = gpu.GpuCompute;
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
@@ -37,7 +37,7 @@ pub fn main(init: std.process.Init) !void {
     const gloc = grena.gpuAllocator();
 
     // 3. Load the WGSL compute pipeline
-    const add_process = try GpuProcess.init(
+    const add_cp = try GpuCompute.init(
         device,
         @embedFile("shaders/add.wgsl"),
         .{ .bindings = &.{
@@ -46,7 +46,7 @@ pub fn main(init: std.process.Init) !void {
             .{ .element_size = @sizeOf(f16) },
         } },
     );
-    defer add_process.deinit();
+    defer add_cp.deinit();
 
     // 4. Setup CPU data
     const len: usize = 16;
@@ -74,7 +74,7 @@ pub fn main(init: std.process.Init) !void {
     try buf_b.load(f16, data_b);
 
     // 7. Dispatch the Compute Process
-    try add_process.run(gloc, .{ buf_a, buf_b, buf_out });
+    try add_cp.run(gloc, .{ buf_a, buf_b, buf_out });
 
     // 8. Map and copy the resulting buffer back to the CPU
     const out = try buf_out.read(allocator, f16);
@@ -82,7 +82,6 @@ pub fn main(init: std.process.Init) !void {
 
     std.debug.print("Result: {any}\n", .{out});
 }
-
 ```
 
 ## Dependencies
