@@ -1,4 +1,3 @@
-const std = @import("std");
 const GpuDevice = @import("GpuDevice.zig");
 const c = @import("utils.zig").c;
 

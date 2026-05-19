@@ -1,4 +1,3 @@
-const std = @import("std");
 const c = @import("utils.zig").c;
 const sv = @import("utils.zig").sv;
 const GpuAllocator = @import("GpuAllocator.zig");
@@ -59,10 +58,8 @@ pub fn run(
         @compileError("Expected a tuple of GpuBuffers for args. E.g. .{ buf_a, buf_b }");
 
     const fields = type_info.@"struct".fields;
-    if (fields.len != self.def.bindings.len) {
-        std.log.err("Process expected {d} arguments, got {d}", .{ self.def.bindings.len, fields.len });
+    if (fields.len != self.def.bindings.len)
         return error.InvalidArgumentCount;
-    }
 
     var elements_count: u32 = 0;
 
@@ -83,10 +80,8 @@ pub fn run(
         const el_size = self.def.bindings[i].element_size;
         if (el_size > 0) {
             const expected_min_bytes = @as(u64, elements_count) * el_size;
-            if (buf.size < expected_min_bytes) {
-                std.log.err("Argument {d} size mismatch: expected at least {d} bytes, got {d}", .{ i, expected_min_bytes, buf.size });
+            if (buf.size < expected_min_bytes)
                 return error.BufferTooSmall;
-            }
         }
     }
 
