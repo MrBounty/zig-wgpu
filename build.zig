@@ -4,7 +4,6 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Define the module so other projects can import it
     const mod = b.addModule("zig-wgpu", .{
         .root_source_file = b.path("src/lib.zig"),
         .target = target,

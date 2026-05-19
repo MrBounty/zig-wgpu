@@ -82,3 +82,55 @@ pub fn main(init: std.process.Init) !void {
 ## Dependencies
 
 * **`wgpu.h`**: The library relies on the WebGPU C API headers to bind to the native system graphics.
+
+## System Requirements
+
+Because this library binds to native system graphics APIs via `wgpu-native`,
+you must ensure the appropriate development headers and libraries are available on your system before compiling.
+
+### Linux (Vulkan)
+You need the Vulkan development headers to compile the project, and a Vulkan-compatible driver to run it. 
+
+Depending on your distribution, install the following packages:
+* **Ubuntu / Debian:**
+  ```bash
+  sudo apt update
+  sudo apt install libvulkan-dev mesa-vulkan-drivers
+  ```
+* **Fedora / RHEL:**
+  ```bash
+  sudo dnf install vulkan-devel mesa-vulkan-drivers
+  ```
+* **Arch Linux:**
+  ```bash
+  sudo pacman -S vulkan-headers vulkan-icd-loader
+  ```
+
+### macOS (Metal)
+No extra installation is required.
+The build script automatically links against the standard Apple frameworks provided by the Xcode Command Line Tools
+(`Metal`, `QuartzCore`, `Foundation`, `CoreGraphics`).
+
+### Windows (DirectX 12)
+No extra installation is required.
+The build script automatically links against the standard Windows SDK libraries (`d3d12`, `dxgi`, `user32`).
+Ensure you have the MSVC build tools installed.
+
+---
+
+## Adding to your project
+
+To use this module in your own Zig project, add it to your `build.zig.zon`:
+```bash
+zig fetch --save git+https://git.bouvais.lu/adrien/zig-wgpu
+```
+
+Then, in your `build.zig`, import and add the module to your executable:
+```zig
+const zig_wgpu = b.dependency("zig-wgpu", .{
+    .target = target,
+    .optimize = optimize,
+});
+
+exe.root_module.addImport("gpu", zig_wgpu.module("zig-wgpu"));
+```
