@@ -73,7 +73,7 @@ pub fn main(init: std.process.Init) !void {
     try buf_a.load(f16, data_a);
     try buf_b.load(f16, data_b);
 
-    // 7. Dispatch the Compute Process
+    // 7. Dispatch the Compute
     try add_cp.run(gloc, .{ buf_a, buf_b, buf_out });
 
     // 8. Map and copy the resulting buffer back to the CPU

@@ -10,7 +10,7 @@ pub const Binding = struct {
     element_size: u32 = 0,
 };
 
-pub const ProcessDef = struct {
+pub const ComputeDef = struct {
     bindings: []const Binding,
     workgroup_size: u32 = 256,
     max_workgroups: u32 = 65535,
@@ -20,9 +20,9 @@ pub const ProcessDef = struct {
 };
 
 pip: c.WGPUComputePipeline,
-def: ProcessDef,
+def: ComputeDef,
 
-pub fn init(device: GpuDevice, wgsl: []const u8, def: ProcessDef) !@This() {
+pub fn init(device: GpuDevice, wgsl: []const u8, def: ComputeDef) !@This() {
     var wgsl_src = c.WGPUShaderSourceWGSL{
         .chain = .{ .sType = c.WGPUSType_ShaderSourceWGSL },
         .code = sv(wgsl),
