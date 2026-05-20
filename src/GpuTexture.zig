@@ -3,7 +3,7 @@ const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
 
-const TextureUsage = enum(u64) {
+const GpuTextureUsage = enum(u64) {
     None = 0x0000000000000000,
     CopySrc = 0x0000000000000001,
     CopyDst = 0x0000000000000002,
@@ -13,29 +13,33 @@ const TextureUsage = enum(u64) {
     TransientAttachment = 0x0000000000000020,
 };
 
+pub const GpuTextureDef = struct {
+    size: c.WGPUExtent3D,
+    usage: std.EnumSet(GpuTextureUsage),
+    format: GpuTextureFormat,
+};
+
 raw: c.WGPUTexture,
-size: c.WGPUExtent3D,
-usage: c.WGPUTextureUsage,
-format: GpuTextureFormat,
 gloc: GpuAllocator,
+def: GpuTextureDef,
 
 /// Allocates the underlying WebGPU handle and registers it to the parent GpuAllocator
-pub fn init(gloc: GpuAllocator, format: GpuTextureFormat, size: c.WGPUExtent3D, usage: std.EnumSet(TextureUsage)) !@This() {
+pub fn init(gloc: GpuAllocator, def: GpuTextureDef) !@This() {
     var use: u64 = 0;
-    var iter = usage.iterator();
+    var iter = def.usage.iterator();
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
     const desc = c.WGPUTextureDescriptor{
         .usage = use,
         .dimension = c.WGPUTextureDimension_2D,
-        .size = size,
-        .format = @intFromEnum(format),
+        .size = def.size,
+        .format = @intFromEnum(def.format),
         .mipLevelCount = 1,
         .sampleCount = 1,
     };
     const raw = try gloc.allocTexture(desc);
 
-    return .{ .gloc = gloc, .raw = raw, .size = size, .format = format, .usage = use };
+    return .{ .gloc = gloc, .raw = raw, .def = def };
 }
 
 /// Unregisters from the parent GpuAllocator and cleanly destroys GPU resources

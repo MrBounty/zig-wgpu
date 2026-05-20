@@ -10,7 +10,7 @@ pub const Binding = struct {
     element_size: u32 = 0,
 };
 
-pub const RenderDef = struct {
+pub const GpuRenderDef = struct {
     bindings: []const Binding = &.{},
     /// The surface texture format we are rendering to (e.g., BGRA8Unorm)
     texture_format: GpuTextureFormat,
@@ -32,9 +32,9 @@ const GpuPrimitiveTopology = enum(c_uint) {
 };
 
 pip: c.WGPURenderPipeline,
-def: RenderDef,
+def: GpuRenderDef,
 
-pub fn init(device: GpuDevice, wgsl: []const u8, def: RenderDef) !@This() {
+pub fn init(device: GpuDevice, wgsl: []const u8, def: GpuRenderDef) !@This() {
     var wgsl_src = c.WGPUShaderSourceWGSL{
         .chain = .{ .sType = c.WGPUSType_ShaderSourceWGSL },
         .code = sv(wgsl),

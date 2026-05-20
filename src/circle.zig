@@ -35,12 +35,11 @@ pub fn main(init: std.process.Init) !void {
     defer circle_rp.deinit();
 
     // 3. Create the offscreen VRAM texture to render into
-    const texture = try GpuTexture.init(
-        gloc,
-        .RGBA8Unorm,
-        .{ .width = width, .height = height, .depthOrArrayLayers = 1 },
-        .initMany(&.{ .RenderAttachment, .CopySrc }),
-    );
+    const texture = try GpuTexture.init(gloc, .{
+        .format = .RGBA8Unorm,
+        .size = .{ .width = width, .height = height, .depthOrArrayLayers = 1 },
+        .usage = .initMany(&.{ .RenderAttachment, .CopySrc }),
+    });
     defer texture.deinit();
 
     const target_view = c.wgpuTextureCreateView(texture.raw, null) orelse return error.View;
