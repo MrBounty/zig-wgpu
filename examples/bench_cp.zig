@@ -1,7 +1,7 @@
 const std = @import("std");
 const gpu = @import("gpu");
 const GpuDevice = gpu.GpuDevice;
-const GpuArena = gpu.GpuArena;
+const GpuArenaAllocator = gpu.GpuArenaAllocator;
 const GpuAllocator = gpu.GpuAllocator;
 const GpuBuffer = gpu.GpuBuffer;
 const GpuCompute = gpu.GpuCompute;
@@ -60,9 +60,8 @@ pub fn main(init: std.process.Init) !void {
     const device = try GpuDevice.init(.{ .vram_bytes_limit = 4 * 1024 * 1024 * 1024 });
     defer device.deinit();
 
-    var grena = GpuArena.init(init.gpa, device);
+    var grena = GpuArenaAllocator.init(init.gpa, device.gpuAllocator());
     defer grena.deinit();
-
     const gloc = grena.gpuAllocator();
 
     const add_pip = try GpuCompute.init(gloc, @embedFile("shaders/add.wgsl"), .{ .bindings = &.{

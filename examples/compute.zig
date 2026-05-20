@@ -1,7 +1,7 @@
 const std = @import("std");
 const gpu = @import("gpu");
 const GpuDevice = gpu.GpuDevice;
-const GpuArena = gpu.GpuArena;
+const GpuArenaAllocator = gpu.GpuArenaAllocator;
 const GpuBuffer = gpu.GpuBuffer;
 const GpuCompute = gpu.GpuCompute;
 
@@ -13,7 +13,7 @@ pub fn main(init: std.process.Init) !void {
     defer device.deinit();
 
     // 2. Create a GPU Arena to manage VRAM
-    var grena = GpuArena.init(allocator, device);
+    var grena = GpuArenaAllocator.init(allocator, device.gpuAllocator());
     defer grena.deinit();
     const gloc = grena.gpuAllocator();
 
