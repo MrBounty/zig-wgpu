@@ -27,7 +27,6 @@ pub fn main(init: std.process.Init) !void {
             .{ .element_size = @sizeOf(f16) },
         } },
     );
-    defer add_cp.deinit();
 
     // 4. Setup CPU data
     const len: usize = 16;
@@ -47,8 +46,9 @@ pub fn main(init: std.process.Init) !void {
     const buf_b = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
     const buf_out = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
 
-    // Note: The buffers are safely tied to the GpuArena which will automatically
+    // Note: Buffers are safely tied to the GpuArenaAllocator which will automatically
     // release them at the end. You can also manually call buf_x.deinit() if desired.
+    // This will also release pipelines, textures, ect. Everything using a GpuAllocator to init.
 
     // 6. Transfer data from CPU slices to GPU Buffers
     try buf_a.load(f16, data_a);
