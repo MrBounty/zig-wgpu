@@ -215,7 +215,7 @@ No extra installation required. Automatically links against `d3d12`, `dxgi`, and
 Add it to your `build.zig.zon`:
 
 ```bash
-zig fetch --save git+[https://git.bouvais.lu/adrien/zig-wgpu](https://git.bouvais.lu/adrien/zig-wgpu)
+zig fetch --save git+[https://git.bouvais.lu/adrien/zig-wgpu#ref=0.2.0](https://git.bouvais.lu/adrien/zig-wgpu)
 ```
 
 Then, expose it in your `build.zig`:
