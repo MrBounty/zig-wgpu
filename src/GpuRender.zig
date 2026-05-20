@@ -58,7 +58,6 @@ pub fn init(device: GpuDevice, wgsl: []const u8, def: RenderDef) !@This() {
         .vertex = .{
             .module = shader,
             .entryPoint = sv(def.vertex_entry),
-            .bufferCount = 0, // Assuming procedural drawing (like our circle!)
         },
         .primitive = .{
             .topology = def.topology,

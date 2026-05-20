@@ -6,6 +6,7 @@ const GpuDevice = gpu.GpuDevice;
 const GpuArena = gpu.GpuArena;
 const GpuBuffer = gpu.GpuBuffer;
 const GpuRender = gpu.GpuRender;
+const GpuTexture = gpu.GpuTexture;
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
@@ -20,7 +21,6 @@ pub fn main(init: std.process.Init) !void {
 
     const width: u32 = 512;
     const height: u32 = 512;
-    // We use standard RGBA8Unorm format for an offscreen image target
     const render_format = c.WGPUTextureFormat_RGBA8Unorm;
 
     // 2. Load our Render Pipeline (Procedural Triangle Strip)
@@ -36,22 +36,15 @@ pub fn main(init: std.process.Init) !void {
     defer circle_rp.deinit();
 
     // 3. Create the offscreen VRAM texture to render into
-    const texture_desc = c.WGPUTextureDescriptor{
-        .nextInChain = null,
-        .label = sv("Offscreen Render Target"),
-        .usage = c.WGPUTextureUsage_RenderAttachment | c.WGPUTextureUsage_CopySrc,
-        .dimension = c.WGPUTextureDimension_2D,
-        .size = .{ .width = width, .height = height, .depthOrArrayLayers = 1 },
-        .format = render_format,
-        .mipLevelCount = 1,
-        .sampleCount = 1,
-        .viewFormatCount = 0,
-        .viewFormats = null,
-    };
-    const target_texture = c.wgpuDeviceCreateTexture(device.device, &texture_desc) orelse return error.Texture;
-    defer c.wgpuTextureRelease(target_texture);
+    const texture = try GpuTexture.init(
+        gloc,
+        .RGBA8Unorm,
+        .{ .width = width, .height = height, .depthOrArrayLayers = 1 },
+        .initMany(&.{ .RenderAttachment, .CopySrc }),
+    );
+    defer texture.deinit();
 
-    const target_view = c.wgpuTextureCreateView(target_texture, null) orelse return error.View;
+    const target_view = c.wgpuTextureCreateView(texture.raw, null) orelse return error.View;
     defer c.wgpuTextureViewRelease(target_view);
 
     // 4. Create a staging buffer to pull pixels from VRAM to CPU
@@ -70,7 +63,7 @@ pub fn main(init: std.process.Init) !void {
     defer c.wgpuCommandEncoderRelease(enc);
 
     const src_copy = c.WGPUTexelCopyTextureInfo{
-        .texture = target_texture,
+        .texture = texture.raw,
         .mipLevel = 0,
         .origin = .{ .x = 0, .y = 0, .z = 0 },
         .aspect = c.WGPUTextureAspect_All,

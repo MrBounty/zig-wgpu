@@ -1,47 +1,46 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
+const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
 
-raw: c.WGPUBuffer,
-size: u64,
-usage: c.WGPUBufferUsage,
-gloc: GpuAllocator,
-
-const BufferUsage = enum(u64) {
+const TextureUsage = enum(u64) {
     None = 0x0000000000000000,
-    MapRead = 0x0000000000000001,
-    MapWrite = 0x0000000000000002,
-    CopySrc = 0x0000000000000004,
-    CopyDst = 0x0000000000000008,
-    Index = 0x0000000000000010,
-    Vertex = 0x0000000000000020,
-    Uniform = 0x0000000000000040,
-    Storage = 0x0000000000000080,
-    Indirect = 0x0000000000000100,
-    QueryResolve = 0x0000000000000200,
+    CopySrc = 0x0000000000000001,
+    CopyDst = 0x0000000000000002,
+    TextureBinding = 0x0000000000000004,
+    StorageBinding = 0x0000000000000008,
+    RenderAttachment = 0x0000000000000010,
+    TransientAttachment = 0x0000000000000020,
 };
 
+raw: c.WGPUTexture,
+size: c.WGPUExtent3D,
+usage: c.WGPUTextureUsage,
+format: GpuTextureFormat,
+gloc: GpuAllocator,
+
 /// Allocates the underlying WebGPU handle and registers it to the parent GpuAllocator
-pub fn init(gloc: GpuAllocator, size: u64, usage: std.EnumSet(BufferUsage)) !@This() {
+pub fn init(gloc: GpuAllocator, format: GpuTextureFormat, size: c.WGPUExtent3D, usage: std.EnumSet(TextureUsage)) !@This() {
     var use: u64 = 0;
     var iter = usage.iterator();
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
-    // Automatically align the buffer size forward to a multiple of 4 bytes under the hood
-    const aligned_size = std.mem.alignForward(u64, size, 4);
-
-    const raw_handle = try gloc.allocBuffer(.{ .size = aligned_size, .usage = use });
-    return .{
-        .raw = raw_handle,
-        .size = aligned_size,
+    const desc = c.WGPUTextureDescriptor{
         .usage = use,
-        .gloc = gloc,
+        .dimension = c.WGPUTextureDimension_2D,
+        .size = size,
+        .format = @intCast(@intFromEnum(format)),
+        .mipLevelCount = 1,
+        .sampleCount = 1,
     };
+    const raw = try gloc.allocTexture(desc);
+
+    return .{ .gloc = gloc, .raw = raw, .size = size, .format = format, .usage = use };
 }
 
 /// Unregisters from the parent GpuAllocator and cleanly destroys GPU resources
 pub fn deinit(self: @This()) void {
-    self.gloc.freeBuffer(self.raw);
+    self.gloc.freeTexture(self.raw);
 }
 
 /// Native getConstMappedRange wrapper
