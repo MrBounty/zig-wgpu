@@ -7,6 +7,7 @@ const GpuArena = gpu.GpuArena;
 const GpuBuffer = gpu.GpuBuffer;
 const GpuRender = gpu.GpuRender;
 const GpuTexture = gpu.GpuTexture;
+const GpuTextureView = gpu.GpuTextureView;
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
@@ -42,8 +43,8 @@ pub fn main(init: std.process.Init) !void {
     });
     defer texture.deinit();
 
-    const target_view = c.wgpuTextureCreateView(texture.raw, null) orelse return error.View;
-    defer c.wgpuTextureViewRelease(target_view);
+    const view = try GpuTextureView.init(gloc, texture, .{});
+    defer view.deinit();
 
     // 4. Create a staging buffer to pull pixels from VRAM to CPU
     // 4 bytes per pixel (RGBA8)
@@ -54,7 +55,7 @@ pub fn main(init: std.process.Init) !void {
     const cpu_staging_buf = try GpuBuffer.init(gloc, buffer_bytes, .initMany(&.{ .CopyDst, .CopySrc }));
 
     // 5. Draw the Circle Frame into the texture view!
-    try circle_rp.draw(gloc, target_view, 4, .{});
+    try circle_rp.draw(gloc, view, 4, .{});
 
     // 6. Copy the texture data into our CPU staging buffer
     const enc = c.wgpuDeviceCreateCommandEncoder(device.device, null) orelse return error.Encoder;

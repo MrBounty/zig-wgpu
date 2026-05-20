@@ -2,6 +2,11 @@ const std = @import("std");
 const c = @import("utils.zig").c;
 const sv = @import("utils.zig").sv;
 
+// TODO: Make Allocator more zig like
+//  - GpuDevice can return a GpuAllocator that just allocate and nothing else
+//  - From this GpuAllocator, can create a GpuArena like std.heap.ArenaAllocator.init(allocator)
+//  - Rename GpuArenaAllocator too
+
 const Ctx = struct {
     adapter: c.WGPUAdapter = null,
     device: c.WGPUDevice = null,

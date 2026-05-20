@@ -21,7 +21,6 @@ const BufferUsage = enum(u64) {
     QueryResolve = 0x0000000000000200,
 };
 
-/// Allocates the underlying WebGPU handle and registers it to the parent GpuAllocator
 pub fn init(gloc: GpuAllocator, size: u64, usage: std.EnumSet(BufferUsage)) !@This() {
     var use: u64 = 0;
     var iter = usage.iterator();
@@ -39,17 +38,14 @@ pub fn init(gloc: GpuAllocator, size: u64, usage: std.EnumSet(BufferUsage)) !@Th
     };
 }
 
-/// Unregisters from the parent GpuAllocator and cleanly destroys GPU resources
 pub fn deinit(self: @This()) void {
     self.gloc.freeBuffer(self.raw);
 }
 
-/// Native getConstMappedRange wrapper
 pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopaque {
     return c.wgpuBufferGetConstMappedRange(self.raw, offset, size);
 }
 
-/// Native mapAsync wrapper
 pub fn mapAsync(
     self: @This(),
     mode: c.WGPUMapMode,
@@ -60,12 +56,11 @@ pub fn mapAsync(
     _ = c.wgpuBufferMapAsync(self.raw, mode, offset, size, callback_info);
 }
 
-/// Native unmap wrapper
 pub fn unmap(self: @This()) void {
     c.wgpuBufferUnmap(self.raw);
 }
 
-/// CPU to GPU.
+/// CPU to GPU
 pub fn load(
     self: @This(),
     T: type,
@@ -92,6 +87,7 @@ pub fn load(
     }
 }
 
+/// GPU to CPU
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
 

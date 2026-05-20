@@ -2,16 +2,7 @@ const std = @import("std");
 const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
-
-const GpuTextureUsage = enum(u64) {
-    None = 0x0000000000000000,
-    CopySrc = 0x0000000000000001,
-    CopyDst = 0x0000000000000002,
-    TextureBinding = 0x0000000000000004,
-    StorageBinding = 0x0000000000000008,
-    RenderAttachment = 0x0000000000000010,
-    TransientAttachment = 0x0000000000000020,
-};
+const GpuTextureUsage = @import("lib.zig").GpuTextureUsage;
 
 pub const GpuTextureDef = struct {
     size: c.WGPUExtent3D,
@@ -23,7 +14,6 @@ raw: c.WGPUTexture,
 gloc: GpuAllocator,
 def: GpuTextureDef,
 
-/// Allocates the underlying WebGPU handle and registers it to the parent GpuAllocator
 pub fn init(gloc: GpuAllocator, def: GpuTextureDef) !@This() {
     var use: u64 = 0;
     var iter = def.usage.iterator();
@@ -42,17 +32,14 @@ pub fn init(gloc: GpuAllocator, def: GpuTextureDef) !@This() {
     return .{ .gloc = gloc, .raw = raw, .def = def };
 }
 
-/// Unregisters from the parent GpuAllocator and cleanly destroys GPU resources
 pub fn deinit(self: @This()) void {
     self.gloc.freeTexture(self.raw);
 }
 
-/// Native getConstMappedRange wrapper
 pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopaque {
     return c.wgpuBufferGetConstMappedRange(self.raw, offset, size);
 }
 
-/// Native mapAsync wrapper
 pub fn mapAsync(
     self: @This(),
     mode: c.WGPUMapMode,
@@ -63,12 +50,11 @@ pub fn mapAsync(
     _ = c.wgpuBufferMapAsync(self.raw, mode, offset, size, callback_info);
 }
 
-/// Native unmap wrapper
 pub fn unmap(self: @This()) void {
     c.wgpuBufferUnmap(self.raw);
 }
 
-/// CPU to GPU.
+/// CPU to GPU
 pub fn load(
     self: @This(),
     T: type,
@@ -95,6 +81,7 @@ pub fn load(
     }
 }
 
+// GPU to CPU
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
 

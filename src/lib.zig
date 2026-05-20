@@ -5,6 +5,7 @@ pub const GpuDevice = @import("GpuDevice.zig");
 pub const GpuCompute = @import("GpuCompute.zig");
 pub const GpuRender = @import("GpuRender.zig");
 pub const GpuTexture = @import("GpuTexture.zig");
+pub const GpuTextureView = @import("GpuTextureView.zig");
 
 pub const GpuTextureFormat = enum(c_uint) {
     Undefined = 0,
@@ -173,4 +174,14 @@ pub const GpuTextureFormat = enum(c_uint) {
             else => 0,
         };
     }
+};
+
+pub const GpuTextureUsage = enum(u64) {
+    None = 0x0000000000000000,
+    CopySrc = 0x0000000000000001,
+    CopyDst = 0x0000000000000002,
+    TextureBinding = 0x0000000000000004,
+    StorageBinding = 0x0000000000000008,
+    RenderAttachment = 0x0000000000000010,
+    TransientAttachment = 0x0000000000000020,
 };

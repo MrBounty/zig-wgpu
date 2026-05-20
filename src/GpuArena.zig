@@ -7,6 +7,7 @@ const c = @import("utils.zig").c;
 device: GpuDevice,
 tracked_buffers: std.AutoHashMap(c.WGPUBuffer, c.WGPUBufferDescriptor),
 tracked_textures: std.AutoHashMap(c.WGPUTexture, c.WGPUTextureDescriptor),
+tracked_views: std.AutoHashMap(c.WGPUTextureView, c.WGPUTextureViewDescriptor),
 allocated_vram_bytes: u64 = 0,
 
 pub fn init(cpu_allocator: std.mem.Allocator, device: GpuDevice) @This() {
@@ -14,6 +15,7 @@ pub fn init(cpu_allocator: std.mem.Allocator, device: GpuDevice) @This() {
         .device = device,
         .tracked_buffers = .init(cpu_allocator),
         .tracked_textures = .init(cpu_allocator),
+        .tracked_views = .init(cpu_allocator),
     };
 }
 
@@ -29,6 +31,11 @@ pub fn deinit(self: *@This()) void {
     while (it_texture.next()) |tex_ptr|
         c.wgpuTextureRelease(tex_ptr.*);
     self.tracked_textures.deinit();
+
+    var it_view = self.tracked_views.keyIterator();
+    while (it_view.next()) |view_ptr|
+        c.wgpuTextureViewRelease(view_ptr.*);
+    self.tracked_views.deinit();
 }
 
 /// Returns the type-erased immutable interface wrapper
@@ -41,6 +48,8 @@ pub fn gpuAllocator(self: *@This()) GpuAllocator {
             .freeBuffer = freeBuffer,
             .allocTexture = allocTexture,
             .freeTexture = freeTexture,
+            .allocTextureView = allocTextureView,
+            .freeTextureView = freeTextureView,
         },
     };
 }
@@ -65,12 +74,12 @@ fn allocBuffer(ctx: *anyopaque, desc: c.WGPUBufferDescriptor) anyerror!c.WGPUBuf
     return buf;
 }
 
-fn freeBuffer(ctx: *anyopaque, buf_raw: c.WGPUBuffer) void {
+fn freeBuffer(ctx: *anyopaque, raw: c.WGPUBuffer) void {
     const self: *@This() = @ptrCast(@alignCast(ctx));
 
-    if (self.tracked_buffers.fetchRemove(buf_raw)) |kv| {
-        c.wgpuBufferDestroy(buf_raw);
-        c.wgpuBufferRelease(buf_raw);
+    if (self.tracked_buffers.fetchRemove(raw)) |kv| {
+        c.wgpuBufferDestroy(raw);
+        c.wgpuBufferRelease(raw);
         self.allocated_vram_bytes -= kv.value.size;
     }
 }
@@ -93,15 +102,28 @@ fn allocTexture(ctx: *anyopaque, desc: c.WGPUTextureDescriptor) anyerror!c.WGPUT
     return texture;
 }
 
-fn freeTexture(ctx: *anyopaque, texture_raw: c.WGPUTexture) void {
+fn freeTexture(ctx: *anyopaque, raw: c.WGPUTexture) void {
     const self: *@This() = @ptrCast(@alignCast(ctx));
 
-    if (self.tracked_textures.fetchRemove(texture_raw)) |kv| {
-        c.wgpuTextureRelease(texture_raw);
+    if (self.tracked_textures.fetchRemove(raw)) |kv| {
+        c.wgpuTextureRelease(raw);
 
         const desc = kv.value;
         const format: GpuTextureFormat = @enumFromInt(desc.format);
         const bytes_size = desc.size.width * desc.size.height * format.bytesPerPixel();
         self.allocated_vram_bytes -= bytes_size;
     }
+}
+
+fn allocTextureView(ctx: *anyopaque, texture: c.WGPUTexture, desc: c.WGPUTextureViewDescriptor) anyerror!c.WGPUTextureView {
+    const self: *@This() = @ptrCast(@alignCast(ctx));
+    const view = c.wgpuTextureCreateView(texture, &desc) orelse return error.View;
+    try self.tracked_views.put(view, desc);
+    return view;
+}
+
+fn freeTextureView(ctx: *anyopaque, raw: c.WGPUTextureView) void {
+    const self: *@This() = @ptrCast(@alignCast(ctx));
+    if (self.tracked_views.remove(raw))
+        c.wgpuTextureViewRelease(raw);
 }

@@ -4,6 +4,7 @@ const sv = @import("utils.zig").sv;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
 const GpuDevice = @import("GpuDevice.zig");
+const GpuTextureView = @import("GpuTextureView.zig");
 const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
 
 pub const Binding = struct {
@@ -99,7 +100,7 @@ pub fn deinit(self: @This()) void {
 pub fn draw(
     self: @This(),
     gloc: GpuAllocator,
-    target_view: c.WGPUTextureView,
+    target_view: GpuTextureView,
     vertex_count: u32,
     args: anytype,
 ) !void {
@@ -144,7 +145,7 @@ pub fn draw(
     defer c.wgpuCommandEncoderRelease(enc);
 
     const color_attachment = c.WGPURenderPassColorAttachment{
-        .view = target_view,
+        .view = target_view.raw,
         .resolveTarget = null,
         .loadOp = c.WGPULoadOp_Clear,
         .storeOp = c.WGPUStoreOp_Store,
