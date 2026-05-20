@@ -10,10 +10,6 @@ const GpuTextureView = gpu.GpuTextureView;
 const width: u32 = 512;
 const height: u32 = 512;
 
-// Note: Everything using a GpuAllocator in init from an GpuAllocatorArena is safely
-// tied to it which will automatically release them when deinit the arena itself.
-// You can also manually call x.deinit() if desired.
-
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
 
@@ -22,9 +18,7 @@ pub fn main(init: std.process.Init) !void {
     defer device.deinit();
 
     // 2. Init VRAM Arena
-    var grena = GpuArenaAllocator.init(allocator, device.gpuAllocator());
-    defer grena.deinit();
-    const gloc = grena.gpuAllocator();
+    const gloc = device.gpuAllocator();
 
     // 3. Load Render Pipeline
     const circle_rp = try GpuRender.init(
@@ -54,6 +48,7 @@ pub fn main(init: std.process.Init) !void {
     defer cpu_staging_cpu.deinit();
 
     // 8. Read GpuBuffer to CPU
+    // This need to be free manually because CPU memory
     const pixels = try cpu_staging_cpu.read(allocator, u8);
     defer allocator.free(pixels);
 
