@@ -1,49 +1,83 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
+const GpuBuffer = @import("GpuBuffer.zig");
+const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
+const GpuTextureUsage = @import("lib.zig").GpuTextureUsage;
 
-raw: c.WGPUBuffer,
-size: u64,
-usage: c.WGPUBufferUsage,
-gloc: GpuAllocator,
-
-const BufferUsage = enum(u64) {
-    None = 0x0000000000000000,
-    MapRead = 0x0000000000000001,
-    MapWrite = 0x0000000000000002,
-    CopySrc = 0x0000000000000004,
-    CopyDst = 0x0000000000000008,
-    Index = 0x0000000000000010,
-    Vertex = 0x0000000000000020,
-    Uniform = 0x0000000000000040,
-    Storage = 0x0000000000000080,
-    Indirect = 0x0000000000000100,
-    QueryResolve = 0x0000000000000200,
+pub const GpuTextureDef = struct {
+    size: c.WGPUExtent3D,
+    usage: std.EnumSet(GpuTextureUsage),
+    format: GpuTextureFormat,
 };
 
-pub fn init(gloc: GpuAllocator, size: u64, usage: std.EnumSet(BufferUsage)) !@This() {
+raw: c.WGPUTexture,
+gloc: GpuAllocator,
+def: GpuTextureDef,
+
+pub fn init(gloc: GpuAllocator, def: GpuTextureDef) !@This() {
     var use: u64 = 0;
-    var iter = usage.iterator();
+    var iter = def.usage.iterator();
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
-    // Automatically align the buffer size forward to a multiple of 4 bytes under the hood
-    const aligned_size = std.mem.alignForward(u64, size, 4);
-
-    const raw_handle = try gloc.allocBuffer(.{ .size = aligned_size, .usage = use });
-    return .{
-        .raw = raw_handle,
-        .size = aligned_size,
+    const desc = c.WGPUTextureDescriptor{
         .usage = use,
-        .gloc = gloc,
+        .dimension = c.WGPUTextureDimension_2D,
+        .size = def.size,
+        .format = @intFromEnum(def.format),
+        .mipLevelCount = 1,
+        .sampleCount = 1,
     };
+    const raw = try gloc.allocTexture(desc);
+
+    return .{ .gloc = gloc, .raw = raw, .def = def };
 }
 
 pub fn deinit(self: @This()) void {
-    self.gloc.freeBuffer(self.raw);
+    self.gloc.freeTexture(self.raw);
 }
 
 pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopaque {
     return c.wgpuBufferGetConstMappedRange(self.raw, offset, size);
+}
+
+pub fn bytesSize(self: @This()) u32 {
+    return self.bytesSizeRow() * self.def.size.height;
+}
+
+pub fn bytesSizeRow(self: @This()) u32 {
+    return self.def.size.width * self.def.format.bytesPerPixel();
+}
+
+/// Return a GpuBuffer containing a copy of the texture.
+pub fn buffCopy(self: @This(), gloc: GpuAllocator) !GpuBuffer {
+    const buf = try GpuBuffer.init(gloc, self.bytesSize(), .initMany(&.{ .CopyDst, .CopySrc }));
+
+    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse return error.Encoder;
+    defer c.wgpuCommandEncoderRelease(enc);
+
+    const src_copy = c.WGPUTexelCopyTextureInfo{
+        .texture = self.raw,
+        .mipLevel = 0,
+        .origin = .{ .x = 0, .y = 0, .z = 0 },
+        .aspect = c.WGPUTextureAspect_All,
+    };
+    const dst_copy = c.WGPUTexelCopyBufferInfo{
+        .buffer = buf.raw,
+        .layout = .{
+            .offset = 0,
+            .bytesPerRow = self.bytesSizeRow(),
+            .rowsPerImage = self.def.size.height,
+        },
+    };
+
+    c.wgpuCommandEncoderCopyTextureToBuffer(enc, &src_copy, &dst_copy, &self.def.size);
+
+    const cmd = c.wgpuCommandEncoderFinish(enc, null);
+    defer c.wgpuCommandBufferRelease(cmd);
+    c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
+
+    return buf;
 }
 
 pub fn mapAsync(
@@ -87,7 +121,7 @@ pub fn load(
     }
 }
 
-/// GPU to CPU
+// GPU to CPU
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
 

@@ -1,6 +1,13 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
 const sv = @import("utils.zig").sv;
+const GpuAllocator = @import("GpuAllocator.zig");
+const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
+
+// TODO: Make Allocator more zig like
+//  - GpuDevice can return a GpuAllocator that just allocate and nothing else
+//  - From this GpuAllocator, can create a GpuArena like std.heap.ArenaAllocator.init(allocator)
+//  - Rename GpuArenaAllocator too
 
 const Ctx = struct {
     adapter: c.WGPUAdapter = null,
@@ -126,4 +133,76 @@ fn onDevice(
     }
     const ctx: *Ctx = @ptrCast(@alignCast(userdata1.?));
     ctx.device = device;
+}
+
+// Allocation stuff
+
+/// Returns the type-erased immutable interface wrapper
+pub fn gpuAllocator(self: *const @This()) GpuAllocator {
+    return .{
+        .device = self.*,
+        .ptr = @ptrCast(@constCast(self)),
+        .vtable = &.{
+            .allocBuffer = allocBuffer,
+            .freeBuffer = freeBuffer,
+            .allocTexture = allocTexture,
+            .freeTexture = freeTexture,
+            .allocTextureView = allocTextureView,
+            .freeTextureView = freeTextureView,
+            .allocRenderPipeline = allocRenderPipeline,
+            .freeRenderPipeline = freeRenderPipeline,
+            .allocComputePipeline = allocComputePipeline,
+            .freeComputePipeline = freeComputePipeline,
+        },
+    };
+}
+
+fn allocBuffer(ctx: *anyopaque, desc: c.WGPUBufferDescriptor) anyerror!c.WGPUBuffer {
+    const self: *@This() = @ptrCast(@alignCast(ctx));
+    if (desc.size > self.limits.maxBufferSize)
+        return error.SingleBufferExceedsLimit;
+    return c.wgpuDeviceCreateBuffer(self.device, &desc) orelse return error.BufferAlloc;
+}
+
+fn freeBuffer(_: *anyopaque, raw: c.WGPUBuffer) void {
+    c.wgpuBufferDestroy(raw);
+    c.wgpuBufferRelease(raw);
+}
+
+fn allocTexture(ctx: *anyopaque, desc: c.WGPUTextureDescriptor) anyerror!c.WGPUTexture {
+    const self: *@This() = @ptrCast(@alignCast(ctx));
+    const format: GpuTextureFormat = @enumFromInt(desc.format);
+    if (desc.size.width * desc.size.height * format.bytesPerPixel() > self.limits.maxBufferSize)
+        return error.SingleBufferExceedsLimit;
+    return c.wgpuDeviceCreateTexture(self.device, &desc) orelse return error.Texture;
+}
+
+fn freeTexture(_: *anyopaque, raw: c.WGPUTexture) void {
+    c.wgpuTextureRelease(raw);
+}
+
+fn allocTextureView(_: *anyopaque, texture: c.WGPUTexture, desc: c.WGPUTextureViewDescriptor) anyerror!c.WGPUTextureView {
+    return c.wgpuTextureCreateView(texture, &desc) orelse return error.View;
+}
+
+fn freeTextureView(_: *anyopaque, raw: c.WGPUTextureView) void {
+    c.wgpuTextureViewRelease(raw);
+}
+
+fn allocRenderPipeline(ctx: *anyopaque, desc: c.WGPURenderPipelineDescriptor) anyerror!c.WGPURenderPipeline {
+    const self: *@This() = @ptrCast(@alignCast(ctx));
+    return c.wgpuDeviceCreateRenderPipeline(self.device, &desc) orelse return error.Pipeline;
+}
+
+fn freeRenderPipeline(_: *anyopaque, raw: c.WGPURenderPipeline) void {
+    c.wgpuRenderPipelineRelease(raw);
+}
+
+fn allocComputePipeline(ctx: *anyopaque, desc: c.WGPUComputePipelineDescriptor) anyerror!c.WGPUComputePipeline {
+    const self: *@This() = @ptrCast(@alignCast(ctx));
+    return c.wgpuDeviceCreateComputePipeline(self.device, &desc) orelse return error.Pipeline;
+}
+
+fn freeComputePipeline(_: *anyopaque, raw: c.WGPUComputePipeline) void {
+    c.wgpuComputePipelineRelease(raw);
 }
