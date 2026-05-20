@@ -4,6 +4,7 @@ const sv = @import("utils.zig").sv;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
 const GpuDevice = @import("GpuDevice.zig");
+const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
 
 pub const Binding = struct {
     element_size: u32 = 0,
@@ -12,7 +13,7 @@ pub const Binding = struct {
 pub const RenderDef = struct {
     bindings: []const Binding = &.{},
     /// The surface texture format we are rendering to (e.g., BGRA8Unorm)
-    texture_format: c.WGPUTextureFormat,
+    texture_format: GpuTextureFormat,
     /// The names of the entry points inside your WGSL code
     vertex_entry: []const u8 = "vs_main",
     fragment_entry: []const u8 = "fs_main",
@@ -40,7 +41,7 @@ pub fn init(device: GpuDevice, wgsl: []const u8, def: RenderDef) !@This() {
     };
 
     const color_target = c.WGPUColorTargetState{
-        .format = def.texture_format,
+        .format = @intCast(@intFromEnum(def.texture_format)),
         .blend = &blend,
         .writeMask = c.WGPUColorWriteMask_All,
     };

@@ -21,7 +21,6 @@ pub fn main(init: std.process.Init) !void {
 
     const width: u32 = 512;
     const height: u32 = 512;
-    const render_format = c.WGPUTextureFormat_RGBA8Unorm;
 
     // 2. Load our Render Pipeline (Procedural Triangle Strip)
     const circle_rp = try GpuRender.init(
@@ -29,7 +28,7 @@ pub fn main(init: std.process.Init) !void {
         @embedFile("shaders/circle.wgsl"),
         .{
             .bindings = &.{},
-            .texture_format = render_format,
+            .texture_format = .RGBA8Unorm,
             .topology = c.WGPUPrimitiveTopology_TriangleStrip,
         },
     );
