@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
+const GpuBuffer = @import("GpuBuffer.zig");
 const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
 const GpuTextureUsage = @import("lib.zig").GpuTextureUsage;
 
@@ -38,6 +39,45 @@ pub fn deinit(self: @This()) void {
 
 pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopaque {
     return c.wgpuBufferGetConstMappedRange(self.raw, offset, size);
+}
+
+pub fn bytesSize(self: @This()) u32 {
+    return self.bytesSizeRow() * self.def.size.height;
+}
+
+pub fn bytesSizeRow(self: @This()) u32 {
+    return self.def.size.width * self.def.format.bytesPerPixel();
+}
+
+/// Return a GpuBuffer containing a copy of the texture.
+pub fn buffCopy(self: @This(), gloc: GpuAllocator) !GpuBuffer {
+    const buf = try GpuBuffer.init(gloc, self.bytesSize(), .initMany(&.{ .CopyDst, .CopySrc }));
+
+    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse return error.Encoder;
+    defer c.wgpuCommandEncoderRelease(enc);
+
+    const src_copy = c.WGPUTexelCopyTextureInfo{
+        .texture = self.raw,
+        .mipLevel = 0,
+        .origin = .{ .x = 0, .y = 0, .z = 0 },
+        .aspect = c.WGPUTextureAspect_All,
+    };
+    const dst_copy = c.WGPUTexelCopyBufferInfo{
+        .buffer = buf.raw,
+        .layout = .{
+            .offset = 0,
+            .bytesPerRow = self.bytesSizeRow(),
+            .rowsPerImage = self.def.size.height,
+        },
+    };
+
+    c.wgpuCommandEncoderCopyTextureToBuffer(enc, &src_copy, &dst_copy, &self.def.size);
+
+    const cmd = c.wgpuCommandEncoderFinish(enc, null);
+    defer c.wgpuCommandBufferRelease(cmd);
+    c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
+
+    return buf;
 }
 
 pub fn mapAsync(
