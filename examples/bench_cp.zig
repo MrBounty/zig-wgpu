@@ -65,7 +65,7 @@ pub fn main(init: std.process.Init) !void {
 
     const gloc = grena.gpuAllocator();
 
-    const add_pip = try GpuCompute.init(device, @embedFile("shaders/add.wgsl"), .{ .bindings = &.{
+    const add_pip = try GpuCompute.init(gloc, @embedFile("shaders/add.wgsl"), .{ .bindings = &.{
         .{ .element_size = @sizeOf(f16) },
         .{ .element_size = @sizeOf(f16) },
         .{ .element_size = @sizeOf(f16) },

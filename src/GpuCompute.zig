@@ -20,30 +20,30 @@ pub const ComputeDef = struct {
 };
 
 pip: c.WGPUComputePipeline,
+gloc: GpuAllocator,
 def: ComputeDef,
 
-pub fn init(device: GpuDevice, wgsl: []const u8, def: ComputeDef) !@This() {
+pub fn init(gloc: GpuAllocator, wgsl: []const u8, def: ComputeDef) !@This() {
     var wgsl_src = c.WGPUShaderSourceWGSL{
         .chain = .{ .sType = c.WGPUSType_ShaderSourceWGSL },
         .code = sv(wgsl),
     };
-    const shader = c.wgpuDeviceCreateShaderModule(device.device, &.{
+    const shader = c.wgpuDeviceCreateShaderModule(gloc.device.device, &.{
         .nextInChain = @ptrCast(&wgsl_src),
     }) orelse return error.Shader;
     defer c.wgpuShaderModuleRelease(shader);
 
-    const pip = c.wgpuDeviceCreateComputePipeline(device.device, &.{
-        .compute = .{ .module = shader, .entryPoint = sv("main") },
-    }) orelse return error.Pipeline;
+    const pip = try gloc.allocComputePipeline(.{ .compute = .{ .module = shader, .entryPoint = sv("main") } });
 
     return .{
+        .gloc = gloc,
         .pip = pip,
         .def = def,
     };
 }
 
 pub fn deinit(self: @This()) void {
-    c.wgpuComputePipelineRelease(self.pip);
+    self.gloc.freeComputePipeline(self.pip);
 }
 
 /// Execute the compute pass with arbitrary buffer bindings via a tuple.

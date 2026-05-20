@@ -32,15 +32,16 @@ const GpuPrimitiveTopology = enum(c_uint) {
     Force32 = 0x7FFFFFFF,
 };
 
+gloc: GpuAllocator,
 pip: c.WGPURenderPipeline,
 def: GpuRenderDef,
 
-pub fn init(device: GpuDevice, wgsl: []const u8, def: GpuRenderDef) !@This() {
+pub fn init(gloc: GpuAllocator, wgsl: []const u8, def: GpuRenderDef) !@This() {
     var wgsl_src = c.WGPUShaderSourceWGSL{
         .chain = .{ .sType = c.WGPUSType_ShaderSourceWGSL },
         .code = sv(wgsl),
     };
-    const shader = c.wgpuDeviceCreateShaderModule(device.device, &.{
+    const shader = c.wgpuDeviceCreateShaderModule(gloc.device.device, &.{
         .nextInChain = @ptrCast(&wgsl_src),
     }) orelse return error.Shader;
     defer c.wgpuShaderModuleRelease(shader);
@@ -66,7 +67,7 @@ pub fn init(device: GpuDevice, wgsl: []const u8, def: GpuRenderDef) !@This() {
     };
 
     // 3. Compile the Complete Render Pipeline
-    const pip = c.wgpuDeviceCreateRenderPipeline(device.device, &.{
+    const pip = try gloc.allocRenderPipeline(.{
         .vertex = .{
             .module = shader,
             .entryPoint = sv(def.vertex_entry),
@@ -83,16 +84,17 @@ pub fn init(device: GpuDevice, wgsl: []const u8, def: GpuRenderDef) !@This() {
             .alphaToCoverageEnabled = 0,
         },
         .fragment = &fragment_state,
-    }) orelse return error.Pipeline;
+    });
 
     return .{
+        .gloc = gloc,
         .pip = pip,
         .def = def,
     };
 }
 
 pub fn deinit(self: @This()) void {
-    c.wgpuRenderPipelineRelease(self.pip);
+    self.gloc.freeRenderPipeline(self.pip);
 }
 
 /// Execute the render pass targeting a specific frame texture view.

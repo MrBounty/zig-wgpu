@@ -19,7 +19,7 @@ pub fn main(init: std.process.Init) !void {
 
     // 3. Load the WGSL compute pipeline
     const add_cp = try GpuCompute.init(
-        device,
+        gloc,
         @embedFile("shaders/add.wgsl"),
         .{ .bindings = &.{
             .{ .element_size = @sizeOf(f16) },

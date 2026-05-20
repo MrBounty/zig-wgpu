@@ -10,6 +10,10 @@ const GpuTextureView = gpu.GpuTextureView;
 const width: u32 = 512;
 const height: u32 = 512;
 
+// Note: Everything using a GpuAllocator in init from an GpuAllocatorArena is safely
+// tied to it which will automatically release them when deinit the arena itself.
+// You can also manually call x.deinit() if desired.
+
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
 
@@ -24,7 +28,7 @@ pub fn main(init: std.process.Init) !void {
 
     // 3. Load Render Pipeline
     const circle_rp = try GpuRender.init(
-        device, // Change to gloc + track them
+        gloc,
         @embedFile("shaders/circle.wgsl"),
         .{ .bindings = &.{}, .texture_format = .RGBA8Unorm, .topology = .TriangleStrip },
     );
@@ -55,7 +59,6 @@ pub fn main(init: std.process.Init) !void {
 
     // 9. Write a simple ppm image
     try savePpm(init.io, "circle.ppm", width, height, pixels);
-    std.debug.print("Successfully rendered circle to circle.ppm!\n", .{});
 }
 
 fn savePpm(io: std.Io, filename: []const u8, w: u32, h: u32, rgba_pixels: []const u8) !void {
