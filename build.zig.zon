@@ -1,6 +1,6 @@
 .{
     .name = .zig_wgpu,
-    .version = "0.1.0",
+    .version = "0.2.0",
     .fingerprint = 0x5d0e853acbc0c2c6,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{},

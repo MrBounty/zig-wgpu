@@ -1,26 +1,28 @@
-# Minimal Zig WebGPU Compute Library
+# Minimal Zig WebGPU Compute & Render Library
 
-This is a minimal, self-contained Zig library designed to simplify running compute shaders using WebGPU.
-It abstracts away much of the boilerplate required for GPU device initialization, memory management, and pipeline execution.
+This is a minimal, self-contained Zig library designed to simplify running compute shaders and rendering pipelines using WebGPU. It abstracts away much of the boilerplate required for GPU device initialization, memory management, bind groups, and pipeline execution.
 
 ## Core Modules
 
-The library exports five primary components:
+The library exports the following primary components:
 
-* **`GpuDevice`**: Initializes the WebGPU instance, adapter, device, and queue. It is configured to prioritize high performance and automatically requests the `ShaderF16` feature if the adapter supports it. By default, it enforces a 2 GB VRAM limit.
-* **`GpuArena` / `GpuAllocator`**: A memory management layer that tracks allocated VRAM bytes to prevent exceeding the device budget. The arena automatically destroys and releases all tracked WebGPU buffers when deinitialized.
-* **`GpuBuffer`**: Wraps native WebGPU buffers. It automatically aligns buffer sizes forward to a multiple of 4 bytes. It provides a `.load()` method for CPU-to-GPU data transfers (handling both aligned and unaligned lengths smoothly) and a `.read()` method that utilizes a staging buffer to map GPU data back to the CPU.
-* **`GpuCompute`**: Compiles WGSL source code into a compute pipeline. When running, it automatically splits the work into manageable chunks (up to 1 GB at a time) and dispatches workgroups of size 256.
+* **`GpuDevice`**: Initializes the WebGPU instance, adapter, device, and queue. It is configured to prioritize high performance and automatically requests the `ShaderF16` feature if the adapter supports it. It provides the base `GpuAllocator` for raw VRAM allocations.
+* **`GpuArenaAllocator`**: A memory management layer that wraps a base allocator to track and automatically destroy all allocated WebGPU buffers, textures, views, and pipelines when deinitialized.
+* **`GpuBuffer`**: Wraps native WebGPU buffers. It provides a `.load()` method for CPU-to-GPU data transfers and a `.read()` method that utilizes a staging buffer to map GPU data back to the CPU.
+* **`GpuCompute`**: Compiles WGSL source code into a compute pipeline and dispatches compute workgroups.
+* **`GpuRender` / `GpuTexture` / `GpuTextureView`**: Components used to initialize render pipelines, set up render attachments (textures), and bind render targets for offscreen drawing.
 
-## Quick Start Example
+---
 
-Below is a complete, self-contained example demonstrating how to initialize the GPU, load data, run a compute shader, and read the results back to the CPU:
+## Example 1: Compute Pipeline
+
+Below is a complete example demonstrating how to initialize the GPU via the device allocator, manage VRAM using a GPU Arena, run a compute shader, and read the results back to the CPU:
 
 ```zig
 const std = @import("std");
 const gpu = @import("gpu");
 const GpuDevice = gpu.GpuDevice;
-const GpuArena = gpu.GpuArena;
+const GpuArenaAllocator = gpu.GpuArenaAllocator;
 const GpuBuffer = gpu.GpuBuffer;
 const GpuCompute = gpu.GpuCompute;
 
@@ -32,13 +34,13 @@ pub fn main(init: std.process.Init) !void {
     defer device.deinit();
 
     // 2. Create a GPU Arena to manage VRAM
-    var grena = GpuArena.init(allocator, device);
+    var grena = GpuArenaAllocator.init(allocator, device.gpuAllocator());
     defer grena.deinit();
     const gloc = grena.gpuAllocator();
 
     // 3. Load the WGSL compute pipeline
     const add_cp = try GpuCompute.init(
-        device,
+        gloc,
         @embedFile("shaders/add.wgsl"),
         .{ .bindings = &.{
             .{ .element_size = @sizeOf(f16) },
@@ -46,7 +48,6 @@ pub fn main(init: std.process.Init) !void {
             .{ .element_size = @sizeOf(f16) },
         } },
     );
-    defer add_cp.deinit();
 
     // 4. Setup CPU data
     const len: usize = 16;
@@ -66,8 +67,8 @@ pub fn main(init: std.process.Init) !void {
     const buf_b = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
     const buf_out = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
 
-    // Note: The buffers are safely tied to the GpuArena which will automatically
-    // release them at the end. You can also manually call buf_x.deinit() if desired.
+    // Note: Buffers, pipelines, and other objects initialized with 'gloc' 
+    // are safely tied to the GpuArenaAllocator and will automatically release.
 
     // 6. Transfer data from CPU slices to GPU Buffers
     try buf_a.load(f16, data_a);
@@ -84,53 +85,141 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
+---
+
+## Example 2: Rendering Pipeline (Offscreen to PPM Image)
+
+This example demonstrates how to initialize a rendering pipeline, allocate an output texture target, draw primitives via WebGPU,
+and pull the frame pixels back to the CPU to write a standard image file:
+
+```zig
+const std = @import("std");
+const gpu = @import("gpu");
+const GpuDevice = gpu.GpuDevice;
+const GpuBuffer = gpu.GpuBuffer;
+const GpuRender = gpu.GpuRender;
+const GpuTexture = gpu.GpuTexture;
+const GpuTextureView = gpu.GpuTextureView;
+
+const width: u32 = 512;
+const height: u32 = 512;
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+
+    // 1. Open GPU Device
+    const device = try GpuDevice.init(.{});
+    defer device.deinit();
+
+    // 2. Get base device GPU Allocator
+    const gloc = device.gpuAllocator();
+
+    // 3. Load Render Pipeline
+    const circle_rp = try GpuRender.init(
+        gloc,
+        @embedFile("shaders/circle.wgsl"),
+        .{ .bindings = &.{}, .texture_format = .RGBA8Unorm, .topology = .TriangleStrip },
+    );
+    defer circle_rp.deinit();
+
+    // 4. Create VRAM texture to render into
+    const texture = try GpuTexture.init(gloc, .{
+        .format = .RGBA8Unorm,
+        .size = .{ .width = width, .height = height, .depthOrArrayLayers = 1 },
+        .usage = .initMany(&.{ .RenderAttachment, .CopySrc }),
+    });
+    defer texture.deinit();
+
+    // 5. Create a view from texture
+    const view = try GpuTextureView.init(gloc, texture, .{});
+    defer view.deinit();
+
+    // 6. Run the rendering pipeline
+    try circle_rp.draw(gloc, view, 4, .{});
+
+    // 7. Copy Texture into a readable GPU staging buffer
+    const cpu_staging_buf = try texture.buffCopy(gloc);
+    defer cpu_staging_buf.deinit();
+
+    // 8. Read GpuBuffer to CPU memory
+    const pixels = try cpu_staging_buf.read(allocator, u8);
+    defer allocator.free(pixels);
+
+    // 9. Write out to a simple PPM image
+    try savePpm(init.io, "circle.ppm", width, height, pixels);
+}
+
+fn savePpm(io: std.Io, filename: []const u8, w: u32, h: u32, rgba_pixels: []const u8) !void {
+    const file = try std.Io.Dir.cwd().createFile(io, filename, .{});
+    defer file.close(io);
+
+    var buf: [255]u8 = undefined;
+    var writer = file.writer(io, &buf);
+
+    // PPM Header: P6 format means raw RGB bytes
+    try writer.interface.print("P6\n{d} {d}\n255\n", .{ w, h });
+
+    // Strip Alpha channel when writing out to standard RGB PPM format
+    var i: usize = 0;
+    while (i < rgba_pixels.len) : (i += 4) {
+        try writer.interface.writeAll(rgba_pixels[i .. i + 3]);
+    }
+}
+```
+
+---
+
+## Running Examples Locally
+
+If you have cloned the repository, you can run the included examples directly using the Zig build system:
+
+```bash
+# Run the rendering example (generates circle.ppm)
+zig build circle
+
+# Run the compute example
+zig build compute
+
+# Run the compute benchmark
+zig build bench_cp
+```
+
+---
+
 ## Dependencies
 
-* **`wgpu.h`**: The library relies on the WebGPU C API headers to bind to the native system graphics.
+* **`wgpu.h`**: The library relies on WebGPU C API headers to bind to the native system graphics.
 
 ## System Requirements
 
-Because this library binds to native system graphics APIs via `wgpu-native`,
-you must ensure the appropriate development headers and libraries are available on your system before compiling.
+Because this library binds to native system graphics APIs via `wgpu-native`, you must ensure the appropriate development headers and libraries are available on your system before compiling.
 
 ### Linux (Vulkan)
-You need the Vulkan development headers to compile the project, and a Vulkan-compatible driver to run it. 
 
-Depending on your distribution, install the following packages:
-* **Ubuntu / Debian:**
-  ```bash
-  sudo apt update
-  sudo apt install libvulkan-dev mesa-vulkan-drivers
-  ```
-* **Fedora / RHEL:**
-  ```bash
-  sudo dnf install vulkan-devel mesa-vulkan-drivers
-  ```
-* **Arch Linux:**
-  ```bash
-  sudo pacman -S vulkan-headers vulkan-icd-loader
-  ```
+* **Ubuntu / Debian:** `sudo apt update && sudo apt install libvulkan-dev mesa-vulkan-drivers`
+* **Fedora / RHEL:** `sudo dnf install vulkan-devel mesa-vulkan-drivers`
+* **Arch Linux:** `sudo pacman -S vulkan-headers vulkan-icd-loader`
 
 ### macOS (Metal)
-No extra installation is required.
-The build script automatically links against the standard Apple frameworks provided by the Xcode Command Line Tools
-(`Metal`, `QuartzCore`, `Foundation`, `CoreGraphics`).
+
+No extra installation required. Automatically links against `Metal`, `QuartzCore`, `Foundation`, and `CoreGraphics`.
 
 ### Windows (DirectX 12)
-No extra installation is required.
-The build script automatically links against the standard Windows SDK libraries (`d3d12`, `dxgi`, `user32`).
-Ensure you have the MSVC build tools installed.
+
+No extra installation required. Automatically links against `d3d12`, `dxgi`, and `user32`. Ensure you have MSVC build tools installed.
 
 ---
 
 ## Adding to your project
 
-To use this module in your own Zig project, add it to your `build.zig.zon`:
+Add it to your `build.zig.zon`:
+
 ```bash
-zig fetch --save git+https://git.bouvais.lu/adrien/zig-wgpu
+zig fetch --save git+[https://git.bouvais.lu/adrien/zig-wgpu](https://git.bouvais.lu/adrien/zig-wgpu)
 ```
 
-Then, in your `build.zig`, import and add the module to your executable:
+Then, expose it in your `build.zig`:
+
 ```zig
 const zig_wgpu = b.dependency("zig-wgpu", .{
     .target = target,
