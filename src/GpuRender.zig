@@ -18,7 +18,17 @@ pub const RenderDef = struct {
     vertex_entry: []const u8 = "vs_main",
     fragment_entry: []const u8 = "fs_main",
     /// Primitive topology, default to triangle list
-    topology: c.WGPUPrimitiveTopology = c.WGPUPrimitiveTopology_TriangleList,
+    topology: GpuPrimitiveTopology = .TriangleList,
+};
+
+const GpuPrimitiveTopology = enum(c_uint) {
+    Undefined = 0x00000000,
+    PointList = 0x00000001,
+    LineList = 0x00000002,
+    LineStrip = 0x00000003,
+    TriangleList = 0x00000004,
+    TriangleStrip = 0x00000005,
+    Force32 = 0x7FFFFFFF,
 };
 
 pip: c.WGPURenderPipeline,
@@ -41,7 +51,7 @@ pub fn init(device: GpuDevice, wgsl: []const u8, def: RenderDef) !@This() {
     };
 
     const color_target = c.WGPUColorTargetState{
-        .format = @intCast(@intFromEnum(def.texture_format)),
+        .format = @intFromEnum(def.texture_format),
         .blend = &blend,
         .writeMask = c.WGPUColorWriteMask_All,
     };
@@ -61,7 +71,7 @@ pub fn init(device: GpuDevice, wgsl: []const u8, def: RenderDef) !@This() {
             .entryPoint = sv(def.vertex_entry),
         },
         .primitive = .{
-            .topology = def.topology,
+            .topology = @intFromEnum(def.topology),
             .stripIndexFormat = c.WGPUIndexFormat_Undefined,
             .frontFace = c.WGPUFrontFace_CCW,
             .cullMode = c.WGPUCullMode_None,

@@ -29,7 +29,7 @@ pub fn main(init: std.process.Init) !void {
         .{
             .bindings = &.{},
             .texture_format = .RGBA8Unorm,
-            .topology = c.WGPUPrimitiveTopology_TriangleStrip,
+            .topology = .TriangleStrip,
         },
     );
     defer circle_rp.deinit();

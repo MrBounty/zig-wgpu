@@ -6,7 +6,7 @@ pub const GpuCompute = @import("GpuCompute.zig");
 pub const GpuRender = @import("GpuRender.zig");
 pub const GpuTexture = @import("GpuTexture.zig");
 
-pub const GpuTextureFormat = enum(c_int) {
+pub const GpuTextureFormat = enum(c_uint) {
     Undefined = 0,
     R8Unorm = 1,
     R8Snorm = 2,

@@ -29,7 +29,7 @@ pub fn init(gloc: GpuAllocator, format: GpuTextureFormat, size: c.WGPUExtent3D, 
         .usage = use,
         .dimension = c.WGPUTextureDimension_2D,
         .size = size,
-        .format = @intCast(@intFromEnum(format)),
+        .format = @intFromEnum(format),
         .mipLevelCount = 1,
         .sampleCount = 1,
     };
