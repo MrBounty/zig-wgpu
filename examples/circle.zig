@@ -18,7 +18,9 @@ pub fn main(init: std.process.Init) !void {
     defer device.deinit();
 
     // 2. Init VRAM Arena
-    const gloc = device.gpuAllocator();
+    var grena = GpuArenaAllocator.init(allocator, device.gpuAllocator());
+    defer grena.deinit();
+    const gloc = grena.gpuAllocator();
 
     // 3. Load Render Pipeline
     const circle_rp = try GpuRender.init(

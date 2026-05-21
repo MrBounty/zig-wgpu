@@ -6,6 +6,8 @@ const GpuAllocator = gpu.GpuAllocator;
 const GpuBuffer = gpu.GpuBuffer;
 const GpuCompute = gpu.GpuCompute;
 
+pub const std_options = std.Options{ .log_level = .info };
+
 /// Minimal implementation of a f16 Vector
 const Vec = struct {
     buf: GpuBuffer,
@@ -14,11 +16,10 @@ const Vec = struct {
     // Changed: gloc is passed by value (const)
     pub fn initZero(gloc: GpuAllocator, len: usize) !Vec {
         return .{
-            .buf = try GpuBuffer.init(
-                gloc,
-                len * @sizeOf(f16),
-                .initMany(&.{ .Storage, .CopyDst, .CopySrc }),
-            ),
+            .buf = try GpuBuffer.init(gloc, .{
+                .size = len * @sizeOf(f16),
+                .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }),
+            }),
             .len = len,
         };
     }

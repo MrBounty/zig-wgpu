@@ -1,20 +1,17 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
 const sv = @import("utils.zig").sv;
+const svOpt = @import("utils.zig").svOpt;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
-
-// TODO: Make Allocator more zig like
-//  - GpuDevice can return a GpuAllocator that just allocate and nothing else
-//  - From this GpuAllocator, can create a GpuArena like std.heap.ArenaAllocator.init(allocator)
-//  - Rename GpuArenaAllocator too
 
 const Ctx = struct {
     adapter: c.WGPUAdapter = null,
     device: c.WGPUDevice = null,
 };
 
-const GpuDeviceConfig = struct {
+const GpuDeviceDef = struct {
+    label: ?[]const u8 = null,
     /// VRAM limit. Default 2 GB
     vram_bytes_limit: u64 = 2 * 1024 * 1024 * 1024,
     power_preference: enum(c_uint) {
@@ -31,9 +28,9 @@ device: c.WGPUDevice,
 queue: c.WGPUQueue,
 limits: c.WGPULimits,
 
-config: GpuDeviceConfig,
+def: GpuDeviceDef,
 
-pub fn init(config: GpuDeviceConfig) !@This() {
+pub fn init(def: GpuDeviceDef) !@This() {
     const instance = c.wgpuCreateInstance(
         &std.mem.zeroes(c.WGPUInstanceDescriptor),
     ) orelse return error.NoInstance;
@@ -42,12 +39,24 @@ pub fn init(config: GpuDeviceConfig) !@This() {
     var ctx = Ctx{};
     _ = c.wgpuInstanceRequestAdapter(
         instance,
-        &.{ .powerPreference = @intFromEnum(config.power_preference) },
+        &.{ .powerPreference = @intFromEnum(def.power_preference) },
         .{ .callback = onAdapter, .userdata1 = &ctx },
     );
     c.wgpuInstanceProcessEvents(instance);
     const adapter = ctx.adapter orelse return error.NoAdapter;
     errdefer c.wgpuAdapterRelease(adapter);
+
+    var adapter_info = std.mem.zeroes(c.WGPUAdapterInfo);
+    _ = c.wgpuAdapterGetInfo(adapter, &adapter_info);
+
+    std.log.info("=== WebGPU Device Initialized ===", .{});
+    if (adapter_info.device.length > 0 and adapter_info.device.data != null) {
+        std.log.info("  Device Name  : {s}", .{adapter_info.device.data[0..adapter_info.device.length]});
+    }
+    if (adapter_info.architecture.length > 0 and adapter_info.architecture.data != null) {
+        std.log.info("  Architecture : {s}", .{adapter_info.architecture.data[0..adapter_info.architecture.length]});
+    }
+    std.log.info("  Backend Type : {d}", .{adapter_info.backendType});
 
     var supported_features = std.mem.zeroes(c.WGPUSupportedFeatures);
     c.wgpuAdapterGetFeatures(adapter, &supported_features);
@@ -56,6 +65,11 @@ pub fn init(config: GpuDeviceConfig) !@This() {
     supported_limits.nextInChain = null;
     if (c.wgpuAdapterGetLimits(adapter, &supported_limits) != 1) return error.FailedToGetAdapterLimits;
 
+    std.log.info("  Max Buf Size : {d} MB", .{supported_limits.maxBufferSize / 1024 / 1024});
+    std.log.info("  Max Storage  : {d} MB", .{supported_limits.maxStorageBufferBindingSize / 1024 / 1024});
+    std.log.info("  Max Workgroup: X: {d}, Y: {d}, Z: {d}", .{ supported_limits.maxComputeWorkgroupSizeX, supported_limits.maxComputeWorkgroupSizeY, supported_limits.maxComputeWorkgroupSizeZ });
+    std.log.info("  VRAM Budget  : {d} MB", .{def.vram_bytes_limit / 1024 / 1024});
+
     var has_f16 = false;
     for (0..supported_features.featureCount) |i| {
         if (supported_features.features[i] == c.WGPUFeatureName_ShaderF16) {
@@ -63,6 +77,8 @@ pub fn init(config: GpuDeviceConfig) !@This() {
             break;
         }
     }
+    std.log.info("  Shader F16   : {}", .{has_f16});
+    std.log.info("=================================", .{});
 
     var feature_buf = [_]c.WGPUFeatureName{c.WGPUFeatureName_ShaderF16};
     const required_features: []const c.WGPUFeatureName =
@@ -70,7 +86,7 @@ pub fn init(config: GpuDeviceConfig) !@This() {
 
     const device_descriptor = c.WGPUDeviceDescriptor{
         .nextInChain = null,
-        .label = sv("TensorCompilerDevice"),
+        .label = svOpt(def.label),
         .requiredFeatureCount = required_features.len,
         .requiredFeatures = if (required_features.len > 0) required_features.ptr else null,
         .requiredLimits = &supported_limits,
@@ -89,7 +105,7 @@ pub fn init(config: GpuDeviceConfig) !@This() {
         .device = device,
         .queue = c.wgpuDeviceGetQueue(device),
         .limits = supported_limits,
-        .config = config,
+        .def = def,
     };
 }
 

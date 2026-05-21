@@ -1,11 +1,13 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
+const svOpt = @import("utils.zig").svOpt;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuTexture = @import("lib.zig").GpuTexture;
 const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
 const GpuTextureUsage = @import("lib.zig").GpuTextureUsage;
 
 pub const GpuViewDef = struct {
+    label: ?[]const u8 = null,
     usage: std.EnumSet(GpuTextureUsage) = .empty,
     format: GpuTextureFormat = .Undefined,
 };
@@ -19,6 +21,7 @@ pub fn init(gloc: GpuAllocator, texture: GpuTexture, def: GpuViewDef) !@This() {
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
     const raw = try gloc.allocTextureView(texture.raw, .{
+        .label = svOpt(def.label),
         .format = @intFromEnum(def.format),
         .usage = use,
         .mipLevelCount = 1,

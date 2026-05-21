@@ -1,5 +1,6 @@
 const c = @import("utils.zig").c;
 const sv = @import("utils.zig").sv;
+const svOpt = @import("utils.zig").svOpt;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
 const GpuDevice = @import("GpuDevice.zig");
@@ -11,6 +12,7 @@ pub const Binding = struct {
 };
 
 pub const ComputeDef = struct {
+    label: ?[]const u8 = null,
     bindings: []const Binding,
     workgroup_size: u32 = 256,
     max_workgroups: u32 = 65535,
@@ -33,7 +35,10 @@ pub fn init(gloc: GpuAllocator, wgsl: []const u8, def: ComputeDef) !@This() {
     }) orelse return error.Shader;
     defer c.wgpuShaderModuleRelease(shader);
 
-    const pip = try gloc.allocComputePipeline(.{ .compute = .{ .module = shader, .entryPoint = sv("main") } });
+    const pip = try gloc.allocComputePipeline(.{
+        .label = svOpt(def.label),
+        .compute = .{ .module = shader, .entryPoint = sv("main") },
+    });
 
     return .{
         .gloc = gloc,
@@ -108,11 +113,11 @@ pub fn run(
     defer if (info_buf) |b| b.deinit();
 
     if (self.def.append_info_buffer) {
-        info_buf = try GpuBuffer.init(
-            gloc,
-            @sizeOf(u32),
-            .initMany(&.{ .Uniform, .CopyDst }),
-        );
+        info_buf = try GpuBuffer.init(gloc, .{
+            .size = @sizeOf(u32),
+            .usage = .initMany(&.{ .Uniform, .CopyDst }),
+            .label = "compute_info_buffer",
+        });
         c.wgpuQueueWriteBuffer(gloc.device.queue, info_buf.?.raw, 0, &elements_count, @sizeOf(u32));
 
         entries_buf[entry_count] = .{

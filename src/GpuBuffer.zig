@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
 const GpuAllocator = @import("GpuAllocator.zig");
+const svOpt = @import("utils.zig").svOpt;
 
 raw: c.WGPUBuffer,
 size: u64,
@@ -21,15 +22,25 @@ const BufferUsage = enum(u64) {
     QueryResolve = 0x0000000000000200,
 };
 
-pub fn init(gloc: GpuAllocator, size: u64, usage: std.EnumSet(BufferUsage)) !@This() {
+const GpuBufferDef = struct {
+    label: ?[]const u8 = null,
+    size: u64,
+    usage: std.EnumSet(BufferUsage),
+};
+
+pub fn init(gloc: GpuAllocator, def: GpuBufferDef) !@This() {
     var use: u64 = 0;
-    var iter = usage.iterator();
+    var iter = def.usage.iterator();
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
     // Automatically align the buffer size forward to a multiple of 4 bytes under the hood
-    const aligned_size = std.mem.alignForward(u64, size, 4);
+    const aligned_size = std.mem.alignForward(u64, def.size, 4);
 
-    const raw_handle = try gloc.allocBuffer(.{ .size = aligned_size, .usage = use });
+    const raw_handle = try gloc.allocBuffer(.{
+        .size = aligned_size,
+        .usage = use,
+        .label = svOpt(def.label),
+    });
     return .{
         .raw = raw_handle,
         .size = aligned_size,
@@ -91,11 +102,11 @@ pub fn load(
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
 
-    const staging = try init(
-        self.gloc,
-        self.size,
-        .initMany(&.{ .MapRead, .CopyDst }),
-    );
+    const staging = try init(self.gloc, .{
+        .size = self.size,
+        .usage = .initMany(&.{ .MapRead, .CopyDst }),
+        .label = "staging_read_buffer",
+    });
     defer staging.deinit();
 
     const enc = c.wgpuDeviceCreateCommandEncoder(self.gloc.device.device, null) orelse return error.Encoder;

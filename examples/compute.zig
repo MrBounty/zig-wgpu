@@ -21,11 +21,14 @@ pub fn main(init: std.process.Init) !void {
     const add_cp = try GpuCompute.init(
         gloc,
         @embedFile("shaders/add.wgsl"),
-        .{ .bindings = &.{
-            .{ .element_size = @sizeOf(f16) },
-            .{ .element_size = @sizeOf(f16) },
-            .{ .element_size = @sizeOf(f16) },
-        } },
+        .{
+            .label = "add",
+            .bindings = &.{
+                .{ .element_size = @sizeOf(f16) },
+                .{ .element_size = @sizeOf(f16) },
+                .{ .element_size = @sizeOf(f16) },
+            },
+        },
     );
 
     // 4. Setup CPU data
@@ -42,9 +45,9 @@ pub fn main(init: std.process.Init) !void {
 
     // 5. Initialize raw GPU Buffers
     const byte_size = len * @sizeOf(f16);
-    const buf_a = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
-    const buf_b = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
-    const buf_out = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
+    const buf_a = try GpuBuffer.init(gloc, .{ .label = "a", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
+    const buf_b = try GpuBuffer.init(gloc, .{ .label = "b", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
+    const buf_out = try GpuBuffer.init(gloc, .{ .label = "out", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
 
     // Note: Buffers are safely tied to the GpuArenaAllocator which will automatically
     // release them at the end. You can also manually call buf_x.deinit() if desired.

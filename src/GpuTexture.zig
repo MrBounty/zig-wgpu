@@ -1,11 +1,13 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
+const svOpt = @import("utils.zig").svOpt;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
 const GpuTextureFormat = @import("lib.zig").GpuTextureFormat;
 const GpuTextureUsage = @import("lib.zig").GpuTextureUsage;
 
 pub const GpuTextureDef = struct {
+    label: ?[]const u8 = null,
     size: c.WGPUExtent3D,
     usage: std.EnumSet(GpuTextureUsage),
     format: GpuTextureFormat,
@@ -21,6 +23,7 @@ pub fn init(gloc: GpuAllocator, def: GpuTextureDef) !@This() {
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
     const desc = c.WGPUTextureDescriptor{
+        .label = svOpt(def.label),
         .usage = use,
         .dimension = c.WGPUTextureDimension_2D,
         .size = def.size,
@@ -51,7 +54,11 @@ pub fn bytesSizeRow(self: @This()) u32 {
 
 /// Return a GpuBuffer containing a copy of the texture.
 pub fn buffCopy(self: @This(), gloc: GpuAllocator) !GpuBuffer {
-    const buf = try GpuBuffer.init(gloc, self.bytesSize(), .initMany(&.{ .CopyDst, .CopySrc }));
+    const buf = try GpuBuffer.init(gloc, .{
+        .size = self.bytesSize(),
+        .usage = .initMany(&.{ .CopyDst, .CopySrc }),
+        .label = "texture_copy_buffer",
+    });
 
     const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse return error.Encoder;
     defer c.wgpuCommandEncoderRelease(enc);
@@ -102,38 +109,52 @@ pub fn load(
 ) !void {
     const bytes = data.len * @sizeOf(T);
 
-    if (bytes == self.size) {
-        // Aligned path: direct download
-        c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.size);
-    } else {
-        // Unaligned path: Split the write into an aligned chunk and a padded remainder
-        // to support arbitrary lengths without any allocations or large stack arrays.
-        const aligned_part = (bytes / 4) * 4;
-        if (aligned_part > 0) {
-            c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, aligned_part);
-        }
-
-        var remainder_buf: [4]u8 = .{ 0, 0, 0, 0 };
-        const data_bytes = std.mem.sliceAsBytes(data);
-        @memcpy(remainder_buf[0 .. bytes - aligned_part], data_bytes[aligned_part..bytes]);
-
-        c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, aligned_part, &remainder_buf, 4);
-    }
+    c.wgpuQueueWriteTexture(
+        self.gloc.device.queue,
+        &.{
+            .texture = self.raw,
+            .mipLevel = 0,
+            .origin = .{ .x = 0, .y = 0, .z = 0 },
+            .aspect = c.WGPUTextureAspect_All,
+        },
+        data.ptr,
+        bytes,
+        &.{
+            .offset = 0,
+            .bytesPerRow = self.bytesSizeRow(),
+            .rowsPerImage = self.def.size.height,
+        },
+        &self.def.size,
+    );
 }
 
 // GPU to CPU
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
 
-    const staging = try init(
-        self.gloc,
-        self.size,
-        .initMany(&.{ .MapRead, .CopyDst }),
-    );
+    const staging = try init(self.gloc, .{
+        .size = self.size,
+        .usage = .initMany(&.{ .MapRead, .CopyDst }),
+        .label = "texture_read_staging",
+    });
     defer staging.deinit();
 
     const enc = c.wgpuDeviceCreateCommandEncoder(self.gloc.device.device, null) orelse return error.Encoder;
-    c.wgpuCommandEncoderCopyBufferToBuffer(enc, self.raw, 0, staging.raw, 0, self.size);
+    const src_copy = c.WGPUTexelCopyTextureInfo{
+        .texture = self.raw,
+        .mipLevel = 0,
+        .origin = .{ .x = 0, .y = 0, .z = 0 },
+        .aspect = c.WGPUTextureAspect_All,
+    };
+    const dst_copy = c.WGPUTexelCopyBufferInfo{
+        .buffer = staging.raw,
+        .layout = .{
+            .offset = 0,
+            .bytesPerRow = self.bytesSizeRow(),
+            .rowsPerImage = self.def.size.height,
+        },
+    };
+    c.wgpuCommandEncoderCopyTextureToBuffer(enc, &src_copy, &dst_copy, &self.def.size);
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandEncoderRelease(enc);
     defer c.wgpuCommandBufferRelease(cmd);

@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("utils.zig").c;
 const sv = @import("utils.zig").sv;
+const svOpt = @import("utils.zig").svOpt;
 const GpuAllocator = @import("GpuAllocator.zig");
 const GpuBuffer = @import("GpuBuffer.zig");
 const GpuDevice = @import("GpuDevice.zig");
@@ -12,6 +13,7 @@ pub const Binding = struct {
 };
 
 pub const GpuRenderDef = struct {
+    label: ?[]const u8 = null,
     bindings: []const Binding = &.{},
     /// The surface texture format we are rendering to (e.g., BGRA8Unorm)
     texture_format: GpuTextureFormat,
@@ -68,6 +70,7 @@ pub fn init(gloc: GpuAllocator, wgsl: []const u8, def: GpuRenderDef) !@This() {
 
     // 3. Compile the Complete Render Pipeline
     const pip = try gloc.allocRenderPipeline(.{
+        .label = svOpt(def.label),
         .vertex = .{
             .module = shader,
             .entryPoint = sv(def.vertex_entry),
