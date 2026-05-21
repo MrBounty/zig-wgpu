@@ -87,6 +87,14 @@ pub fn gpuAllocator(self: *@This()) GpuAllocator {
 fn allocBuffer(ctx: *anyopaque, desc: c.WGPUBufferDescriptor) anyerror!c.WGPUBuffer {
     const self: *@This() = @ptrCast(@alignCast(ctx));
     try self.tracked_buffers.ensureTotalCapacity(self.tracked_buffers.count() + 1);
+
+    const bytes = desc.size;
+    if (bytes > self.child_allocator.device.limits.maxBufferSize)
+        return error.SingleBufferExceedsLimit;
+
+    if (bytes + self.allocated_vram_bytes > self.child_allocator.device.def.vram_bytes_limit)
+        return error.ExceedsVramBudget;
+
     const raw = try self.child_allocator.allocBuffer(desc);
     self.tracked_buffers.putAssumeCapacity(raw, desc);
     self.allocated_vram_bytes += desc.size;
