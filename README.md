@@ -42,11 +42,14 @@ pub fn main(init: std.process.Init) !void {
     const add_cp = try GpuCompute.init(
         gloc,
         @embedFile("shaders/add.wgsl"),
-        .{ .bindings = &.{
-            .{ .element_size = @sizeOf(f16) },
-            .{ .element_size = @sizeOf(f16) },
-            .{ .element_size = @sizeOf(f16) },
-        } },
+        .{
+            .label = "add",
+            .bindings = &.{
+                .{ .element_size = @sizeOf(f16) },
+                .{ .element_size = @sizeOf(f16) },
+                .{ .element_size = @sizeOf(f16) },
+            },
+        },
     );
 
     // 4. Setup CPU data
@@ -63,12 +66,13 @@ pub fn main(init: std.process.Init) !void {
 
     // 5. Initialize raw GPU Buffers
     const byte_size = len * @sizeOf(f16);
-    const buf_a = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
-    const buf_b = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
-    const buf_out = try GpuBuffer.init(gloc, byte_size, .initMany(&.{ .Storage, .CopyDst, .CopySrc }));
+    const buf_a = try GpuBuffer.init(gloc, .{ .label = "a", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
+    const buf_b = try GpuBuffer.init(gloc, .{ .label = "b", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
+    const buf_out = try GpuBuffer.init(gloc, .{ .label = "out", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
 
-    // Note: Buffers, pipelines, and other objects initialized with 'gloc' 
-    // are safely tied to the GpuArenaAllocator and will automatically release.
+    // Note: Buffers are safely tied to the GpuArenaAllocator which will automatically
+    // release them at the end. You can also manually call buf_x.deinit() if desired.
+    // This will also release pipelines, textures, ect. Everything using a GpuAllocator to init.
 
     // 6. Transfer data from CPU slices to GPU Buffers
     try buf_a.load(f16, data_a);
@@ -96,6 +100,7 @@ and pull the frame pixels back to the CPU to write a standard image file:
 const std = @import("std");
 const gpu = @import("gpu");
 const GpuDevice = gpu.GpuDevice;
+const GpuArenaAllocator = gpu.GpuArenaAllocator;
 const GpuBuffer = gpu.GpuBuffer;
 const GpuRender = gpu.GpuRender;
 const GpuTexture = gpu.GpuTexture;
@@ -111,8 +116,10 @@ pub fn main(init: std.process.Init) !void {
     const device = try GpuDevice.init(.{});
     defer device.deinit();
 
-    // 2. Get base device GPU Allocator
-    const gloc = device.gpuAllocator();
+    // 2. Init VRAM Arena
+    var grena = GpuArenaAllocator.init(allocator, device.gpuAllocator());
+    defer grena.deinit();
+    const gloc = grena.gpuAllocator();
 
     // 3. Load Render Pipeline
     const circle_rp = try GpuRender.init(
@@ -137,15 +144,16 @@ pub fn main(init: std.process.Init) !void {
     // 6. Run the rendering pipeline
     try circle_rp.draw(gloc, view, 4, .{});
 
-    // 7. Copy Texture into a readable GPU staging buffer
-    const cpu_staging_buf = try texture.buffCopy(gloc);
-    defer cpu_staging_buf.deinit();
+    // 7. Load Texture into GpuBuffer
+    const cpu_staging_cpu = try texture.buffCopy(gloc);
+    defer cpu_staging_cpu.deinit();
 
-    // 8. Read GpuBuffer to CPU memory
-    const pixels = try cpu_staging_buf.read(allocator, u8);
+    // 8. Read GpuBuffer to CPU
+    // This need to be free manually because CPU memory
+    const pixels = try cpu_staging_cpu.read(allocator, u8);
     defer allocator.free(pixels);
 
-    // 9. Write out to a simple PPM image
+    // 9. Write a simple ppm image
     try savePpm(init.io, "circle.ppm", width, height, pixels);
 }
 
