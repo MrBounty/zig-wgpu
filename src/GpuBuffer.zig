@@ -4,11 +4,10 @@ const GpuAllocator = @import("GpuAllocator.zig");
 const svOpt = @import("utils.zig").svOpt;
 
 raw: c.WGPUBuffer,
-size: u64,
-usage: c.WGPUBufferUsage,
 gloc: GpuAllocator,
+def: GpuBufferDef,
 
-const BufferUsage = enum(u64) {
+pub const GpuBufferUsage = enum(u64) {
     None = 0x0000000000000000,
     MapRead = 0x0000000000000001,
     MapWrite = 0x0000000000000002,
@@ -22,10 +21,10 @@ const BufferUsage = enum(u64) {
     QueryResolve = 0x0000000000000200,
 };
 
-const GpuBufferDef = struct {
+pub const GpuBufferDef = struct {
     label: ?[]const u8 = null,
     size: u64,
-    usage: std.EnumSet(BufferUsage),
+    usage: std.EnumSet(GpuBufferUsage),
 };
 
 pub fn init(gloc: GpuAllocator, def: GpuBufferDef) !@This() {
@@ -43,8 +42,7 @@ pub fn init(gloc: GpuAllocator, def: GpuBufferDef) !@This() {
     });
     return .{
         .raw = raw_handle,
-        .size = aligned_size,
-        .usage = use,
+        .def = def,
         .gloc = gloc,
     };
 }
@@ -79,9 +77,9 @@ pub fn load(
 ) !void {
     const bytes = data.len * @sizeOf(T);
 
-    if (bytes == self.size) {
+    if (bytes == self.def.size) {
         // Aligned path: direct download
-        c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.size);
+        c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.def.size);
     } else {
         // Unaligned path: Split the write into an aligned chunk and a padded remainder
         // to support arbitrary lengths without any allocations or large stack arrays.
@@ -100,17 +98,17 @@ pub fn load(
 
 /// GPU to CPU
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
-    const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
+    const out = try alloc.alloc(T, @divExact(self.def.size, @sizeOf(T)));
 
     const staging = try init(self.gloc, .{
-        .size = self.size,
+        .size = self.def.size,
         .usage = .initMany(&.{ .MapRead, .CopyDst }),
         .label = "staging_read_buffer",
     });
     defer staging.deinit();
 
     const enc = c.wgpuDeviceCreateCommandEncoder(self.gloc.device.device, null) orelse return error.Encoder;
-    c.wgpuCommandEncoderCopyBufferToBuffer(enc, self.raw, 0, staging.raw, 0, self.size);
+    c.wgpuCommandEncoderCopyBufferToBuffer(enc, self.raw, 0, staging.raw, 0, self.def.size);
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandEncoderRelease(enc);
     defer c.wgpuCommandBufferRelease(cmd);
@@ -120,13 +118,13 @@ pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     staging.mapAsync(
         c.WGPUMapMode_Read,
         0,
-        self.size,
+        self.def.size,
         .{ .callback = onMapped, .userdata1 = &mapped },
     );
     while (!mapped) self.gloc.device.poll();
 
     const ptr: [*]const T = @ptrCast(@alignCast(
-        staging.getConstMappedRange(0, self.size),
+        staging.getConstMappedRange(0, self.def.size),
     ));
     @memcpy(out[0..out.len], ptr[0..out.len]);
     staging.unmap();

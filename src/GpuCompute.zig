@@ -74,7 +74,7 @@ pub fn run(
             const buf = @field(args, field.name);
             const el_size = self.def.bindings[i].element_size;
             if (el_size > 0) {
-                elements_count = @intCast(buf.size / el_size);
+                elements_count = @intCast(buf.def.size / el_size);
             }
         }
     }
@@ -85,7 +85,7 @@ pub fn run(
         const el_size = self.def.bindings[i].element_size;
         if (el_size > 0) {
             const expected_min_bytes = @as(u64, elements_count) * el_size;
-            if (buf.size < expected_min_bytes)
+            if (buf.def.size < expected_min_bytes)
                 return error.BufferTooSmall;
         }
     }
@@ -103,7 +103,7 @@ pub fn run(
             .binding = @intCast(i),
             .buffer = buf.raw,
             .offset = 0,
-            .size = buf.size, // Size exposes the fully allocated length
+            .size = buf.def.size, // Size exposes the fully allocated length
         };
         entry_count += 1;
     }
