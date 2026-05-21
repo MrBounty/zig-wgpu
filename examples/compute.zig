@@ -32,7 +32,7 @@ pub fn main(init: std.process.Init) !void {
     );
 
     // 4. Setup CPU data
-    const len: usize = 16;
+    const len: usize = 1024;
     const data_a = try allocator.alloc(f16, len);
     defer allocator.free(data_a);
     const data_b = try allocator.alloc(f16, len);
@@ -61,8 +61,15 @@ pub fn main(init: std.process.Init) !void {
     try add_cp.run(gloc, .{ buf_a, buf_b, buf_out });
 
     // 8. Map and copy the resulting buffer back to the CPU
-    const out = try buf_out.read(allocator, f16);
+    const staging = try GpuBuffer.init(gloc, .{
+        .size = byte_size,
+        .usage = .initMany(&.{ .MapRead, .CopyDst }),
+    });
+    defer staging.deinit();
+
+    try buf_out.copy(staging);
+    const out = try staging.read(allocator, f16);
     defer allocator.free(out);
 
-    std.debug.print("Result: {any}\n", .{out});
+    std.debug.print("Result: {any}\n", .{out[0..@min(6, len)]});
 }

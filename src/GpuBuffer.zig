@@ -19,6 +19,13 @@ pub const GpuBufferUsage = enum(u64) {
     Storage = 0x0000000000000080,
     Indirect = 0x0000000000000100,
     QueryResolve = 0x0000000000000200,
+
+    fn enumSetToWGPUBufferUsage(set: std.EnumSet(GpuBufferUsage)) c.WGPUBufferUsage {
+        var use: u64 = 0;
+        var iter = set.iterator();
+        while (iter.next()) |flag| use |= @intFromEnum(flag);
+        return use;
+    }
 };
 
 pub const GpuBufferDef = struct {
@@ -28,16 +35,13 @@ pub const GpuBufferDef = struct {
 };
 
 pub fn init(gloc: GpuAllocator, def: GpuBufferDef) !@This() {
-    var use: u64 = 0;
-    var iter = def.usage.iterator();
-    while (iter.next()) |flag| use |= @intFromEnum(flag);
 
     // Automatically align the buffer size forward to a multiple of 4 bytes under the hood
     const aligned_size = std.mem.alignForward(u64, def.size, 4);
 
     const raw_handle = try gloc.allocBuffer(.{
         .size = aligned_size,
-        .usage = use,
+        .usage = GpuBufferUsage.enumSetToWGPUBufferUsage(def.usage),
         .label = svOpt(def.label),
     });
     return .{
@@ -97,25 +101,14 @@ pub fn load(
 }
 
 /// GPU to CPU
+/// Buffer must have MapRead usage or returns error.BufferNotMappable.
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
+    if (!self.def.usage.contains(.MapRead)) return error.BufferNotMappable;
+
     const out = try alloc.alloc(T, @divExact(self.def.size, @sizeOf(T)));
 
-    const staging = try init(self.gloc, .{
-        .size = self.def.size,
-        .usage = .initMany(&.{ .MapRead, .CopyDst }),
-        .label = "staging_read_buffer",
-    });
-    defer staging.deinit();
-
-    const enc = c.wgpuDeviceCreateCommandEncoder(self.gloc.device.device, null) orelse return error.Encoder;
-    c.wgpuCommandEncoderCopyBufferToBuffer(enc, self.raw, 0, staging.raw, 0, self.def.size);
-    const cmd = c.wgpuCommandEncoderFinish(enc, null);
-    defer c.wgpuCommandEncoderRelease(enc);
-    defer c.wgpuCommandBufferRelease(cmd);
-    c.wgpuQueueSubmit(self.gloc.device.queue, 1, &cmd);
-
     var mapped = false;
-    staging.mapAsync(
+    self.mapAsync(
         c.WGPUMapMode_Read,
         0,
         self.def.size,
@@ -124,10 +117,10 @@ pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     while (!mapped) self.gloc.device.poll();
 
     const ptr: [*]const T = @ptrCast(@alignCast(
-        staging.getConstMappedRange(0, self.def.size),
+        self.getConstMappedRange(0, self.def.size),
     ));
     @memcpy(out[0..out.len], ptr[0..out.len]);
-    staging.unmap();
+    self.unmap();
 
     return out;
 }
@@ -140,4 +133,21 @@ fn onMapped(
 ) callconv(.c) void {
     const flag: *bool = @ptrCast(@alignCast(userdata1.?));
     flag.* = (status == c.WGPUMapAsyncStatus_Success);
+}
+
+/// GPU to GPU. Both buffers must be same size, src needs CopySrc, dst needs CopyDst.
+pub fn copy(src: @This(), dst: @This()) !void {
+    if (src.def.size != dst.def.size) return error.SizeMismatch;
+
+    const copy_src: u64 = @intFromEnum(GpuBufferUsage.CopySrc);
+    const copy_dst: u64 = @intFromEnum(GpuBufferUsage.CopyDst);
+    if (@as(u64, GpuBufferUsage.enumSetToWGPUBufferUsage(src.def.usage)) & copy_src == 0) return error.SrcNotCopyable;
+    if (@as(u64, GpuBufferUsage.enumSetToWGPUBufferUsage(dst.def.usage)) & copy_dst == 0) return error.DstNotWritable;
+
+    const enc = c.wgpuDeviceCreateCommandEncoder(src.gloc.device.device, null) orelse return error.Encoder;
+    c.wgpuCommandEncoderCopyBufferToBuffer(enc, src.raw, 0, dst.raw, 0, src.def.size);
+    const cmd = c.wgpuCommandEncoderFinish(enc, null);
+    defer c.wgpuCommandEncoderRelease(enc);
+    defer c.wgpuCommandBufferRelease(cmd);
+    c.wgpuQueueSubmit(src.gloc.device.queue, 1, &cmd);
 }
