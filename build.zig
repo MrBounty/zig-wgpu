@@ -9,12 +9,20 @@ pub fn build(b: *std.Build) !void {
         .target = target,
     });
 
+    const t = target.result;
+    const arch_name = @tagName(t.cpu.arch);
+    const os_name = @tagName(t.os.tag);
+
+    // Windows uses .lib, Unix-like systems use .a
+    const lib_filename = if (t.os.tag == .windows) "wgpu_native.lib" else "libwgpu_native.a";
+
+    // Example: "libs/wgpu-native/x86_64-windows/wgpu_native.lib"
+    const wgpu_lib_path = b.fmt("libs/wgpu-native/{s}-{s}/{s}", .{ arch_name, os_name, lib_filename });
+
     mod.addIncludePath(b.path("libs/wgpu-native/include"));
-    mod.addLibraryPath(b.path("libs/wgpu-native/lib"));
-    mod.addObjectFile(b.path("libs/wgpu-native/lib/libwgpu_native.a"));
+    mod.addObjectFile(b.path(wgpu_lib_path));
 
     // Platform-specific system frameworks needed by wgpu-native
-    const t = target.result;
     if (t.os.tag == .macos) {
         mod.linkFramework("Metal", .{});
         mod.linkFramework("QuartzCore", .{});
