@@ -200,7 +200,10 @@ zig build bench_cp
 
 ## System Requirements
 
-Because this library binds to native system graphics APIs via `wgpu-native`, you must ensure the appropriate development headers and libraries are available on your system before compiling.
+Because this library binds to native system graphics APIs via `wgpu-native`,
+you must ensure the appropriate development headers and libraries are available on your system before compiling.
+
+It work both for x86_64 and aarch64 on all platforms.
 
 ### Linux (Vulkan)
 

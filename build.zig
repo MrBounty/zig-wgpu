@@ -32,6 +32,7 @@ pub fn build(b: *std.Build) !void {
         mod.linkSystemLibrary("d3d12", .{});
         mod.linkSystemLibrary("dxgi", .{});
         mod.linkSystemLibrary("user32", .{});
+        mod.link_libc = true;
     } else {
         mod.linkSystemLibrary("vulkan", .{});
         mod.linkSystemLibrary("gcc_s", .{});
@@ -58,6 +59,11 @@ pub fn build(b: *std.Build) !void {
                 }),
             });
             exe.root_module.addImport("gpu", mod);
+
+            if (t.os.tag == .windows) {
+                exe.bundle_compiler_rt = false;
+                exe.bundle_ubsan_rt = false;
+            }
 
             b.installArtifact(exe);
 
