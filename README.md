@@ -1,22 +1,37 @@
 # Minimal Zig WebGPU Compute & Render Library
 
-This is a minimal, self-contained Zig library designed to simplify running compute shaders and rendering pipelines using WebGPU. It abstracts away much of the boilerplate required for GPU device initialization, memory management, bind groups, and pipeline execution.
+This is a minimal, self-contained Zig library designed to simplify running compute
+shaders and rendering pipelines using WebGPU. It abstracts away much of the boilerplate
+required for GPU device initialization, memory management, bind groups, and pipeline
+execution.
 
 ## Core Modules
 
 The library exports the following primary components:
 
-* **`GpuDevice`**: Initializes the WebGPU instance, adapter, device, and queue. It is configured to prioritize high performance and automatically requests the `ShaderF16` feature if the adapter supports it. It provides the base `GpuAllocator` for raw VRAM allocations.
-* **`GpuArenaAllocator`**: A memory management layer that wraps a base allocator to track and automatically destroy all allocated WebGPU buffers, textures, views, and pipelines when deinitialized.
-* **`GpuBuffer`**: Wraps native WebGPU buffers. It provides a `.load()` method for CPU-to-GPU data transfers and a `.read()` method that utilizes a staging buffer to map GPU data back to the CPU.
-* **`GpuCompute`**: Compiles WGSL source code into a compute pipeline and dispatches compute workgroups.
-* **`GpuRender` / `GpuTexture` / `GpuTextureView`**: Components used to initialize render pipelines, set up render attachments (textures), and bind render targets for offscreen drawing.
+* **`GpuDevice`**: Initializes the WebGPU instance, adapter, device, and queue.
+It is configured to prioritize high performance and automatically requests the `ShaderF16`
+feature if the adapter supports it. It provides the base `GpuAllocator` for raw
+VRAM allocations.
+* **`GpuArenaAllocator`**: A memory management layer that wraps a base allocator
+to track and automatically destroy all allocated WebGPU buffers, textures, views,
+and pipelines when deinitialized.
+* **`GpuBuffer`**: Wraps native WebGPU buffers. It provides a `.load()` method
+for CPU-to-GPU data transfers and a `.read()` method that utilizes a staging
+buffer to map GPU data back to the CPU.
+* **`GpuCompute`**: Compiles WGSL source code into a compute pipeline and dispatches
+compute workgroups.
+* **`GpuRender` / `GpuTexture` / `GpuTextureView`**: Components used to initialize
+render pipelines, set up render attachments (textures), and bind render targets
+for offscreen drawing.
 
 ---
 
 ## Example 1: Compute Pipeline
 
-Below is a complete example demonstrating how to initialize the GPU via the device allocator, manage VRAM using a GPU Arena, run a compute shader, and read the results back to the CPU:
+Below is a complete example demonstrating how to initialize the GPU via the device
+allocator, manage VRAM using a GPU Arena, run a compute shader, and read the results
+back to the CPU:
 
 ```zig
 const std = @import("std");
@@ -93,7 +108,8 @@ pub fn main(init: std.process.Init) !void {
 
 ## Example 2: Rendering Pipeline (Offscreen to PPM Image)
 
-This example demonstrates how to initialize a rendering pipeline, allocate an output texture target, draw primitives via WebGPU,
+This example demonstrates how to initialize a rendering pipeline, allocate an
+output texture target, draw primitives via WebGPU,
 and pull the frame pixels back to the CPU to write a standard image file:
 
 ```zig
@@ -179,7 +195,8 @@ fn savePpm(io: std.Io, filename: []const u8, w: u32, h: u32, rgba_pixels: []cons
 
 ## Running Examples Locally
 
-If you have cloned the repository, you can run the included examples directly using the Zig build system:
+If you have cloned the repository, you can run the included examples directly
+using the Zig build system:
 
 ```bash
 # Run the rendering example (generates circle.ppm)
@@ -196,12 +213,14 @@ zig build bench_cp
 
 ## Dependencies
 
-* **`wgpu.h`**: The library relies on WebGPU C API headers to bind to the native system graphics.
+* **`wgpu.h`**: The library relies on WebGPU C API headers to bind to the native
+system graphics.
 
 ## System Requirements
 
 Because this library binds to native system graphics APIs via `wgpu-native`,
-you must ensure the appropriate development headers and libraries are available on your system before compiling.
+you must ensure the appropriate development headers and libraries are available
+on your system before compiling.
 
 It work both for x86_64 and aarch64 on all platforms.
 
@@ -213,11 +232,13 @@ It work both for x86_64 and aarch64 on all platforms.
 
 ### macOS (Metal)
 
-No extra installation required. Automatically links against `Metal`, `QuartzCore`, `Foundation`, and `CoreGraphics`.
+No extra installation required. Automatically links against `Metal`, `QuartzCore`,
+`Foundation`, and `CoreGraphics`.
 
 ### Windows (DirectX 12)
 
-No extra installation required. Automatically links against `d3d12`, `dxgi`, and `user32`. Ensure you have MSVC build tools installed.
+No extra installation required. Automatically links against `d3d12`, `dxgi`, and
+`user32`. Ensure you have MSVC build tools installed.
 
 ---
 
