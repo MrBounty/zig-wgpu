@@ -22,40 +22,40 @@ pub const ComputeDef = struct {
 };
 
 pip: c.WGPUComputePipeline,
-gloc: GpuAllocator,
+glloc: GpuAllocator,
 def: ComputeDef,
 
-pub fn init(gloc: GpuAllocator, wgsl: []const u8, def: ComputeDef) !@This() {
+pub fn init(glloc: GpuAllocator, wgsl: []const u8, def: ComputeDef) !@This() {
     var wgsl_src = c.WGPUShaderSourceWGSL{
         .chain = .{ .sType = c.WGPUSType_ShaderSourceWGSL },
         .code = sv(wgsl),
     };
-    const shader = c.wgpuDeviceCreateShaderModule(gloc.device.device, &.{
+    const shader = c.wgpuDeviceCreateShaderModule(glloc.device.device, &.{
         .nextInChain = @ptrCast(&wgsl_src),
     }) orelse return error.Shader;
     defer c.wgpuShaderModuleRelease(shader);
 
-    const pip = try gloc.allocComputePipeline(.{
+    const pip = try glloc.allocComputePipeline(.{
         .label = svOpt(def.label),
         .compute = .{ .module = shader, .entryPoint = sv("main") },
     });
 
     return .{
-        .gloc = gloc,
+        .glloc = glloc,
         .pip = pip,
         .def = def,
     };
 }
 
 pub fn deinit(self: @This()) void {
-    self.gloc.freeComputePipeline(self.pip);
+    self.glloc.freeComputePipeline(self.pip);
 }
 
 /// Execute the compute pass with arbitrary buffer bindings via a tuple.
-/// Example: `try proc.run(gloc, .{ buf_a, buf_b, buf_out });`
+/// Example: `try proc.run(glloc, .{ buf_a, buf_b, buf_out });`
 pub fn run(
     self: @This(),
-    gloc: GpuAllocator,
+    glloc: GpuAllocator,
     args: anytype,
 ) !void {
     const type_info = @typeInfo(@TypeOf(args));
@@ -113,12 +113,12 @@ pub fn run(
     defer if (info_buf) |b| b.deinit();
 
     if (self.def.append_info_buffer) {
-        info_buf = try GpuBuffer.init(gloc, .{
+        info_buf = try GpuBuffer.init(glloc, .{
             .size = @sizeOf(u32),
             .usage = .initMany(&.{ .Uniform, .CopyDst }),
             .label = "compute_info_buffer",
         });
-        c.wgpuQueueWriteBuffer(gloc.device.queue, info_buf.?.raw, 0, &elements_count, @sizeOf(u32));
+        c.wgpuQueueWriteBuffer(glloc.device.queue, info_buf.?.raw, 0, &elements_count, @sizeOf(u32));
 
         entries_buf[entry_count] = .{
             .binding = @intCast(entry_count),
@@ -130,11 +130,11 @@ pub fn run(
     }
 
     const entries = entries_buf[0..entry_count];
-    try submitPass(gloc, self.pip, entries, elements_count, self.def.workgroup_size, self.def.max_workgroups);
+    try submitPass(glloc, self.pip, entries, elements_count, self.def.workgroup_size, self.def.max_workgroups);
 }
 
 fn submitPass(
-    gloc: GpuAllocator,
+    glloc: GpuAllocator,
     pipeline: c.WGPUComputePipeline,
     entries: []const c.WGPUBindGroupEntry,
     n: usize,
@@ -146,14 +146,14 @@ fn submitPass(
     const bgl = c.wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
     defer c.wgpuBindGroupLayoutRelease(bgl);
 
-    const bg = c.wgpuDeviceCreateBindGroup(gloc.device.device, &.{
+    const bg = c.wgpuDeviceCreateBindGroup(glloc.device.device, &.{
         .layout = bgl,
         .entries = entries.ptr,
         .entryCount = entries.len,
     }) orelse return error.BindGroup;
     defer c.wgpuBindGroupRelease(bg);
 
-    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse return error.Encoder;
+    const enc = c.wgpuDeviceCreateCommandEncoder(glloc.device.device, null) orelse return error.Encoder;
     const pass = c.wgpuCommandEncoderBeginComputePass(enc, null);
     c.wgpuComputePassEncoderSetPipeline(pass, pipeline);
     c.wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, null);
@@ -168,7 +168,7 @@ fn submitPass(
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandEncoderRelease(enc);
     defer c.wgpuCommandBufferRelease(cmd);
-    c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
+    c.wgpuQueueSubmit(glloc.device.queue, 1, &cmd);
 }
 
 fn ceilDiv(n: usize, d: usize) usize {

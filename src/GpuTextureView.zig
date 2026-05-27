@@ -13,23 +13,23 @@ pub const GpuViewDef = struct {
 };
 
 raw: c.WGPUTextureView,
-gloc: GpuAllocator,
+glloc: GpuAllocator,
 
-pub fn init(gloc: GpuAllocator, texture: GpuTexture, def: GpuViewDef) !@This() {
+pub fn init(glloc: GpuAllocator, texture: GpuTexture, def: GpuViewDef) !@This() {
     var use: u64 = 0;
     var iter = def.usage.iterator();
     while (iter.next()) |flag| use |= @intFromEnum(flag);
 
-    const raw = try gloc.allocTextureView(texture.raw, .{
+    const raw = try glloc.allocTextureView(texture.raw, .{
         .label = svOpt(def.label),
         .format = @intFromEnum(def.format),
         .usage = use,
         .mipLevelCount = 1,
         .arrayLayerCount = 1,
     });
-    return .{ .gloc = gloc, .raw = raw };
+    return .{ .glloc = glloc, .raw = raw };
 }
 
 pub fn deinit(self: @This()) void {
-    self.gloc.freeTextureView(self.raw);
+    self.glloc.freeTextureView(self.raw);
 }

@@ -14,10 +14,10 @@ pub const GpuTextureDef = struct {
 };
 
 raw: c.WGPUTexture,
-gloc: GpuAllocator,
+glloc: GpuAllocator,
 def: GpuTextureDef,
 
-pub fn init(gloc: GpuAllocator, def: GpuTextureDef) !@This() {
+pub fn init(glloc: GpuAllocator, def: GpuTextureDef) !@This() {
     var use: u64 = 0;
     var iter = def.usage.iterator();
     while (iter.next()) |flag| use |= @intFromEnum(flag);
@@ -31,13 +31,13 @@ pub fn init(gloc: GpuAllocator, def: GpuTextureDef) !@This() {
         .mipLevelCount = 1,
         .sampleCount = 1,
     };
-    const raw = try gloc.allocTexture(desc);
+    const raw = try glloc.allocTexture(desc);
 
-    return .{ .gloc = gloc, .raw = raw, .def = def };
+    return .{ .glloc = glloc, .raw = raw, .def = def };
 }
 
 pub fn deinit(self: @This()) void {
-    self.gloc.freeTexture(self.raw);
+    self.glloc.freeTexture(self.raw);
 }
 
 pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopaque {
@@ -53,14 +53,14 @@ pub fn bytesSizeRow(self: @This()) u32 {
 }
 
 /// Return a GpuBuffer containing a copy of the texture.
-pub fn buffCopy(self: @This(), gloc: GpuAllocator) !GpuBuffer {
-    const buf = try GpuBuffer.init(gloc, .{
+pub fn buffCopy(self: @This(), glloc: GpuAllocator) !GpuBuffer {
+    const buf = try GpuBuffer.init(glloc, .{
         .size = self.bytesSize(),
         .usage = .initMany(&.{ .CopyDst, .CopySrc }),
         .label = "texture_copy_buffer",
     });
 
-    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse return error.Encoder;
+    const enc = c.wgpuDeviceCreateCommandEncoder(glloc.device.device, null) orelse return error.Encoder;
     defer c.wgpuCommandEncoderRelease(enc);
 
     const src_copy = c.WGPUTexelCopyTextureInfo{
@@ -82,7 +82,7 @@ pub fn buffCopy(self: @This(), gloc: GpuAllocator) !GpuBuffer {
 
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandBufferRelease(cmd);
-    c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
+    c.wgpuQueueSubmit(glloc.device.queue, 1, &cmd);
 
     return buf;
 }
@@ -110,7 +110,7 @@ pub fn load(
     const bytes = data.len * @sizeOf(T);
 
     c.wgpuQueueWriteTexture(
-        self.gloc.device.queue,
+        self.glloc.device.queue,
         &.{
             .texture = self.raw,
             .mipLevel = 0,
@@ -132,14 +132,14 @@ pub fn load(
 pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     const out = try alloc.alloc(T, @divExact(self.size, @sizeOf(T)));
 
-    const staging = try init(self.gloc, .{
+    const staging = try init(self.glloc, .{
         .size = self.size,
         .usage = .initMany(&.{ .MapRead, .CopyDst }),
         .label = "texture_read_staging",
     });
     defer staging.deinit();
 
-    const enc = c.wgpuDeviceCreateCommandEncoder(self.gloc.device.device, null) orelse return error.Encoder;
+    const enc = c.wgpuDeviceCreateCommandEncoder(self.glloc.device.device, null) orelse return error.Encoder;
     const src_copy = c.WGPUTexelCopyTextureInfo{
         .texture = self.raw,
         .mipLevel = 0,
@@ -158,7 +158,7 @@ pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandEncoderRelease(enc);
     defer c.wgpuCommandBufferRelease(cmd);
-    c.wgpuQueueSubmit(self.gloc.device.queue, 1, &cmd);
+    c.wgpuQueueSubmit(self.glloc.device.queue, 1, &cmd);
 
     var mapped = false;
     staging.mapAsync(
@@ -167,7 +167,7 @@ pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
         self.size,
         .{ .callback = onMapped, .userdata1 = &mapped },
     );
-    while (!mapped) self.gloc.device.poll();
+    while (!mapped) self.glloc.device.poll();
 
     const ptr: [*]const T = @ptrCast(@alignCast(
         staging.getConstMappedRange(0, self.size),

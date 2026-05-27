@@ -20,18 +20,18 @@ pub fn main(init: std.process.Init) !void {
     // 2. Init VRAM Arena
     var grena = GpuArenaAllocator.init(allocator, device.gpuAllocator());
     defer grena.deinit();
-    const gloc = grena.gpuAllocator();
+    const glloc = grena.gpuAllocator();
 
     // 3. Load Render Pipeline
     const circle_rp = try GpuRender.init(
-        gloc,
+        glloc,
         @embedFile("shaders/circle.wgsl"),
         .{ .bindings = &.{}, .texture_format = .RGBA8Unorm, .topology = .TriangleStrip },
     );
     defer circle_rp.deinit();
 
     // 4. Create VRAM texture to render into
-    const texture = try GpuTexture.init(gloc, .{
+    const texture = try GpuTexture.init(glloc, .{
         .format = .RGBA8Unorm,
         .size = .{ .width = width, .height = height, .depthOrArrayLayers = 1 },
         .usage = .initMany(&.{ .RenderAttachment, .CopySrc }),
@@ -39,14 +39,14 @@ pub fn main(init: std.process.Init) !void {
     defer texture.deinit();
 
     // 5. Create a view from texture
-    const view = try GpuTextureView.init(gloc, texture, .{});
+    const view = try GpuTextureView.init(glloc, texture, .{});
     defer view.deinit();
 
     // 6. Run the rendering pipeline
-    try circle_rp.draw(gloc, view, 4, .{});
+    try circle_rp.draw(glloc, view, 4, .{});
 
     // 7. Load Texture into GpuBuffer
-    const cpu_staging_cpu = try texture.buffCopy(gloc);
+    const cpu_staging_cpu = try texture.buffCopy(glloc);
     defer cpu_staging_cpu.deinit();
 
     // 8. Read GpuBuffer to CPU

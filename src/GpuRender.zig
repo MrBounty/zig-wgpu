@@ -34,16 +34,16 @@ const GpuPrimitiveTopology = enum(c_uint) {
     Force32 = 0x7FFFFFFF,
 };
 
-gloc: GpuAllocator,
+glloc: GpuAllocator,
 pip: c.WGPURenderPipeline,
 def: GpuRenderDef,
 
-pub fn init(gloc: GpuAllocator, wgsl: []const u8, def: GpuRenderDef) !@This() {
+pub fn init(glloc: GpuAllocator, wgsl: []const u8, def: GpuRenderDef) !@This() {
     var wgsl_src = c.WGPUShaderSourceWGSL{
         .chain = .{ .sType = c.WGPUSType_ShaderSourceWGSL },
         .code = sv(wgsl),
     };
-    const shader = c.wgpuDeviceCreateShaderModule(gloc.device.device, &.{
+    const shader = c.wgpuDeviceCreateShaderModule(glloc.device.device, &.{
         .nextInChain = @ptrCast(&wgsl_src),
     }) orelse return error.Shader;
     defer c.wgpuShaderModuleRelease(shader);
@@ -69,7 +69,7 @@ pub fn init(gloc: GpuAllocator, wgsl: []const u8, def: GpuRenderDef) !@This() {
     };
 
     // 3. Compile the Complete Render Pipeline
-    const pip = try gloc.allocRenderPipeline(.{
+    const pip = try glloc.allocRenderPipeline(.{
         .label = svOpt(def.label),
         .vertex = .{
             .module = shader,
@@ -90,21 +90,21 @@ pub fn init(gloc: GpuAllocator, wgsl: []const u8, def: GpuRenderDef) !@This() {
     });
 
     return .{
-        .gloc = gloc,
+        .glloc = glloc,
         .pip = pip,
         .def = def,
     };
 }
 
 pub fn deinit(self: @This()) void {
-    self.gloc.freeRenderPipeline(self.pip);
+    self.glloc.freeRenderPipeline(self.pip);
 }
 
 /// Execute the render pass targeting a specific frame texture view.
 /// Passes bind groups via a tuple exactly like your original compute setup.
 pub fn draw(
     self: @This(),
-    gloc: GpuAllocator,
+    glloc: GpuAllocator,
     target_view: GpuTextureView,
     vertex_count: u32,
     args: anytype,
@@ -138,7 +138,7 @@ pub fn draw(
     const bgl = c.wgpuRenderPipelineGetBindGroupLayout(self.pip, 0);
     defer c.wgpuBindGroupLayoutRelease(bgl);
 
-    const bg = c.wgpuDeviceCreateBindGroup(gloc.device.device, &.{
+    const bg = c.wgpuDeviceCreateBindGroup(glloc.device.device, &.{
         .layout = bgl,
         .entries = entries.ptr,
         .entryCount = @intCast(entries.len),
@@ -146,7 +146,7 @@ pub fn draw(
     defer c.wgpuBindGroupRelease(bg);
 
     // Encode Render Command
-    const enc = c.wgpuDeviceCreateCommandEncoder(gloc.device.device, null) orelse return error.Encoder;
+    const enc = c.wgpuDeviceCreateCommandEncoder(glloc.device.device, null) orelse return error.Encoder;
     defer c.wgpuCommandEncoderRelease(enc);
 
     const color_attachment = c.WGPURenderPassColorAttachment{
@@ -180,5 +180,5 @@ pub fn draw(
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandBufferRelease(cmd);
 
-    c.wgpuQueueSubmit(gloc.device.queue, 1, &cmd);
+    c.wgpuQueueSubmit(glloc.device.queue, 1, &cmd);
 }

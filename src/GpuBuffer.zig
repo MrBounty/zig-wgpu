@@ -4,7 +4,7 @@ const GpuAllocator = @import("GpuAllocator.zig");
 const svOpt = @import("utils.zig").svOpt;
 
 raw: c.WGPUBuffer,
-gloc: GpuAllocator,
+glloc: GpuAllocator,
 def: GpuBufferDef,
 
 pub const GpuBufferUsage = enum(u64) {
@@ -34,12 +34,12 @@ pub const GpuBufferDef = struct {
     usage: std.EnumSet(GpuBufferUsage),
 };
 
-pub fn init(gloc: GpuAllocator, def: GpuBufferDef) !@This() {
+pub fn init(glloc: GpuAllocator, def: GpuBufferDef) !@This() {
 
     // Automatically align the buffer size forward to a multiple of 4 bytes under the hood
     const aligned_size = std.mem.alignForward(u64, def.size, 4);
 
-    const raw_handle = try gloc.allocBuffer(.{
+    const raw_handle = try glloc.allocBuffer(.{
         .size = aligned_size,
         .usage = GpuBufferUsage.enumSetToWGPUBufferUsage(def.usage),
         .label = svOpt(def.label),
@@ -47,12 +47,12 @@ pub fn init(gloc: GpuAllocator, def: GpuBufferDef) !@This() {
     return .{
         .raw = raw_handle,
         .def = def,
-        .gloc = gloc,
+        .glloc = glloc,
     };
 }
 
 pub fn deinit(self: @This()) void {
-    self.gloc.freeBuffer(self.raw);
+    self.glloc.freeBuffer(self.raw);
 }
 
 pub fn getConstMappedRange(self: @This(), offset: u64, size: u64) ?*const anyopaque {
@@ -83,20 +83,20 @@ pub fn load(
 
     if (bytes == self.def.size) {
         // Aligned path: direct download
-        c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, self.def.size);
+        c.wgpuQueueWriteBuffer(self.glloc.device.queue, self.raw, 0, data.ptr, self.def.size);
     } else {
         // Unaligned path: Split the write into an aligned chunk and a padded remainder
         // to support arbitrary lengths without any allocations or large stack arrays.
         const aligned_part = (bytes / 4) * 4;
         if (aligned_part > 0) {
-            c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, 0, data.ptr, aligned_part);
+            c.wgpuQueueWriteBuffer(self.glloc.device.queue, self.raw, 0, data.ptr, aligned_part);
         }
 
         var remainder_buf: [4]u8 = .{ 0, 0, 0, 0 };
         const data_bytes = std.mem.sliceAsBytes(data);
         @memcpy(remainder_buf[0 .. bytes - aligned_part], data_bytes[aligned_part..bytes]);
 
-        c.wgpuQueueWriteBuffer(self.gloc.device.queue, self.raw, aligned_part, &remainder_buf, 4);
+        c.wgpuQueueWriteBuffer(self.glloc.device.queue, self.raw, aligned_part, &remainder_buf, 4);
     }
 }
 
@@ -114,7 +114,7 @@ pub fn read(self: @This(), alloc: std.mem.Allocator, T: type) ![]T {
         self.def.size,
         .{ .callback = onMapped, .userdata1 = &mapped },
     );
-    while (!mapped) self.gloc.device.poll();
+    while (!mapped) self.glloc.device.poll();
 
     const ptr: [*]const T = @ptrCast(@alignCast(
         self.getConstMappedRange(0, self.def.size),
@@ -144,10 +144,10 @@ pub fn copy(src: @This(), dst: @This()) !void {
     if (@as(u64, GpuBufferUsage.enumSetToWGPUBufferUsage(src.def.usage)) & copy_src == 0) return error.SrcNotCopyable;
     if (@as(u64, GpuBufferUsage.enumSetToWGPUBufferUsage(dst.def.usage)) & copy_dst == 0) return error.DstNotWritable;
 
-    const enc = c.wgpuDeviceCreateCommandEncoder(src.gloc.device.device, null) orelse return error.Encoder;
+    const enc = c.wgpuDeviceCreateCommandEncoder(src.glloc.device.device, null) orelse return error.Encoder;
     c.wgpuCommandEncoderCopyBufferToBuffer(enc, src.raw, 0, dst.raw, 0, src.def.size);
     const cmd = c.wgpuCommandEncoderFinish(enc, null);
     defer c.wgpuCommandEncoderRelease(enc);
     defer c.wgpuCommandBufferRelease(cmd);
-    c.wgpuQueueSubmit(src.gloc.device.queue, 1, &cmd);
+    c.wgpuQueueSubmit(src.glloc.device.queue, 1, &cmd);
 }

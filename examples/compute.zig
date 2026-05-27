@@ -15,11 +15,11 @@ pub fn main(init: std.process.Init) !void {
     // 2. Create a GPU Arena to manage VRAM
     var grena = GpuArenaAllocator.init(allocator, device.gpuAllocator());
     defer grena.deinit();
-    const gloc = grena.gpuAllocator();
+    const glloc = grena.gpuAllocator();
 
     // 3. Load the WGSL compute pipeline
     const add_cp = try GpuCompute.init(
-        gloc,
+        glloc,
         @embedFile("shaders/add.wgsl"),
         .{
             .label = "add",
@@ -45,9 +45,9 @@ pub fn main(init: std.process.Init) !void {
 
     // 5. Initialize raw GPU Buffers
     const byte_size = len * @sizeOf(f16);
-    const buf_a = try GpuBuffer.init(gloc, .{ .label = "a", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
-    const buf_b = try GpuBuffer.init(gloc, .{ .label = "b", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
-    const buf_out = try GpuBuffer.init(gloc, .{ .label = "out", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
+    const buf_a = try GpuBuffer.init(glloc, .{ .label = "a", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
+    const buf_b = try GpuBuffer.init(glloc, .{ .label = "b", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
+    const buf_out = try GpuBuffer.init(glloc, .{ .label = "out", .size = byte_size, .usage = .initMany(&.{ .Storage, .CopyDst, .CopySrc }) });
 
     // Note: Buffers are safely tied to the GpuArenaAllocator which will automatically
     // release them at the end. You can also manually call buf_x.deinit() if desired.
@@ -58,10 +58,10 @@ pub fn main(init: std.process.Init) !void {
     try buf_b.load(f16, data_b);
 
     // 7. Dispatch the Compute
-    try add_cp.run(gloc, .{ buf_a, buf_b, buf_out });
+    try add_cp.run(glloc, .{ buf_a, buf_b, buf_out });
 
     // 8. Map and copy the resulting buffer back to the CPU
-    const staging = try GpuBuffer.init(gloc, .{
+    const staging = try GpuBuffer.init(glloc, .{
         .size = byte_size,
         .usage = .initMany(&.{ .MapRead, .CopyDst }),
     });
